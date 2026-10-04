@@ -1,0 +1,217 @@
+<!doctype html><html lang="pt-BR"><head><title>Lançar boletim · Apuração Aracati</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/app.css">
+<style>
+.grp-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.grp-h h3{font-size:16px}
+.tot{font:500 12px var(--f-mono);color:var(--muted)}.tot.no{color:var(--bad);font-weight:600}
+</style></head>
+<body>
+<header class="topbar"><label class="muted" for="modo" style="font-size:12px">Listar</label><select class="sel" id="modo" aria-label="O que listar"></select><span class="live" id="live"></span></header>
+<main>
+<div class="bu">
+  <div class="card">
+    <div class="card-h"><h3>Seções</h3><select class="sel" id="filtro" aria-label="Filtro"><option value="pend">Pendentes primeiro</option><option value="todas">Todas</option><option value="apurada">Apuradas</option></select></div>
+    <input class="inp" id="busca" placeholder="Número da seção ou local…" autocomplete="off">
+    <div class="list" id="lista"></div>
+  </div>
+  <div class="card" id="form"></div>
+</div>
+</main>
+<script type="module">
+import * as A from '/app.js';
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+let sel = Number(params.get('secao')) || null;
+let busca = '', filtro = 'pend', rascunhoLocal = {};
+let modo = 'fav'; // 'fav' = favoritos de todos os cargos; senão, o id de um cargo (todos os candidatos dele)
+
+const temFavoritos = () => A.D.candidatos.some(c => c.favorito);
+const cargoPorId = id => A.D.cargos.find(c => c.id === id);
+
+// Grupos exibidos no formulário: [{ cargo, cands }]
+function grupos() {
+  if (modo === 'fav' && temFavoritos()) {
+    return A.D.cargos.map(cargo => ({ cargo, cands: A.candidatosDe(cargo.id).filter(c => c.favorito) })).filter(g => g.cands.length);
+  }
+  const cargo = cargoPorId(modo) || A.D.cargos[0];
+  return cargo ? [{ cargo, cands: A.candidatosDe(cargo.id) }] : [];
+}
+const modoFav = () => modo === 'fav' && temFavoritos();
+
+function montarSeletor() {
+  const opts = [];
+  if (temFavoritos()) opts.push(['fav', 'Favoritos de todos os cargos']);
+  A.D.cargos.forEach(c => opts.push([c.id, `${c.nome} (todos os candidatos)`]));
+  if (!opts.some(([v]) => v === modo)) modo = opts[0][0];
+  $('modo').innerHTML = opts.map(([v, t]) => `<option value="${v}">${A.esc(t)}</option>`).join('');
+  $('modo').value = modo;
+}
+
+// Situação da seção considerando os cargos do modo atual.
+function statusSecao(secaoId) {
+  const st = grupos().map(g => A.statusSecao(secaoId, g.cargo.id));
+  if (st.length && st.every(x => x === 'apurada')) return 'apurada';
+  return st.some(x => x !== 'aguardando') ? 'rascunho' : 'aguardando';
+}
+
+function ordenadas() {
+  const ord = { rascunho: 0, aguardando: 1, apurada: 2 };
+  let l = A.D.secoes.map(s => ({ s, st: statusSecao(s.id), loc: A.localPorId(s.local_id) }));
+  const b = busca.toLowerCase();
+  if (b) l = l.filter(x => String(x.s.numero).includes(b) || (x.loc?.nome || '').toLowerCase().includes(b));
+  if (filtro === 'apurada') l = l.filter(x => x.st === 'apurada');
+  if (filtro === 'pend') l.sort((a, b) => ord[a.st] - ord[b.st] || a.s.zona - b.s.zona || a.s.numero - b.s.numero);
+  return l;
+}
+
+function renderLista() {
+  $('lista').innerHTML = ordenadas().map(({ s, st, loc }) => `<button class="li ${s.id === sel ? 'on' : ''}" data-s="${s.id}"><div><b>${s.zona}/${String(s.numero).padStart(4, '0')}</b><small>${A.esc(loc?.nome)}</small></div><span class="pill"><i class="${A.CLASSE[st]}"></i>${A.ROTULO[st]}</span></button>`).join('')
+    || '<div class="empty">Nenhuma seção encontrada.</div>';
+}
+
+// valor digitado em cada campo ('' = não informado)
+function lerCampos() {
+  const r = {};
+  document.querySelectorAll('[data-c]').forEach(i => { (r[i.dataset.cargo] ||= { votos: {} }).votos[i.dataset.c] = i.value; });
+  document.querySelectorAll('[data-x]').forEach(i => { (r[i.dataset.cargo] ||= { votos: {} })[i.dataset.x] = i.value; });
+  return r;
+}
+
+function renderForm() {
+  const s = A.secaoPorId(sel);
+  if (!s) { $('form').innerHTML = '<div class="empty">Escolha uma seção na lista para lançar o boletim.</div>'; return; }
+  const gs = grupos(), fav = modoFav();
+  if (!gs.length) { $('form').innerHTML = '<div class="empty">Cadastre os candidatos na aba Cadastro.</div>'; return; }
+  const loc = A.localPorId(s.local_id);
+  const salvo = rascunhoLocal[`${s.id}|${modo}`] || {};
+  const val = (cargoId, cid) => {
+    const d = salvo[cargoId]?.votos?.[cid];
+    if (d !== undefined) return d;
+    const v = A.boletim(s.id, cargoId)?.votos?.[cid];
+    return v === undefined ? '' : v;
+  };
+  const extra = (cargoId, k) => {
+    const d = salvo[cargoId]?.[k];
+    if (d !== undefined) return d;
+    const bo = A.boletim(s.id, cargoId);
+    return bo ? bo[k] : '';
+  };
+  const bloco = ({ cargo, cands }) => {
+    const bo = A.boletim(s.id, cargo.id);
+    const st = bo?.status || 'aguardando';
+    return `<div class="grp-h"><h3>${A.esc(cargo.nome)}${cargo.vagas > 1 ? ` <span class="muted" style="font-weight:400;font-size:12px">cada eleitor vota em ${cargo.vagas}</span>` : ''}</h3><span style="display:flex;gap:10px;align-items:center"><span class="tot" data-tot="${cargo.id}"></span><span class="pill"><i class="${A.CLASSE[st]}"></i>${A.ROTULO[st]}</span></span></div>
+    <div class="votes">
+      ${cands.map(c => `<div class="vrow"><div class="sw" style="background:${c.cor}">${A.esc(c.numero)}</div><div style="min-width:0"><b>${A.esc(c.nome)}</b><div class="muted" style="font-size:12px">${A.esc(c.partido)}${c.vice ? ' · vice ' + A.esc(c.vice) : ''}</div></div><input class="num" data-c="${c.id}" data-cargo="${cargo.id}" inputmode="numeric" value="${val(cargo.id, c.id)}" aria-label="Votos ${A.esc(c.nome)}"></div>`).join('')}
+      ${fav ? '' : `${cargo.legenda ? `<div class="vrow"><div class="sw" style="background:var(--wait)">LEG</div><div><b>Voto de legenda</b></div><input class="num" data-x="legenda" data-cargo="${cargo.id}" inputmode="numeric" value="${extra(cargo.id, 'legenda')}"></div>` : ''}
+      <div class="vrow"><div class="sw" style="background:var(--wait)">B</div><div><b>Votos em branco</b></div><input class="num" data-x="brancos" data-cargo="${cargo.id}" inputmode="numeric" value="${extra(cargo.id, 'brancos')}"></div>
+      <div class="vrow"><div class="sw" style="background:var(--wait)">N</div><div><b>Votos nulos</b></div><input class="num" data-x="nulos" data-cargo="${cargo.id}" inputmode="numeric" value="${extra(cargo.id, 'nulos')}"></div>`}
+    </div>`;
+  };
+  const unico = !fav && gs.length === 1 ? A.boletim(s.id, gs[0].cargo.id) : null;
+  $('form').innerHTML = `
+    <div class="card-h"><div><h3>Seção ${s.zona}/${String(s.numero).padStart(4, '0')}</h3><div class="muted">${A.esc(loc?.nome)} · ${A.fmt(s.aptos)} aptos</div></div>
+      <span class="pill"><i class="${A.CLASSE[statusSecao(s.id)]}"></i>${A.ROTULO[statusSecao(s.id)]}</span></div>
+    ${s.agregadas ? `<div class="warnbox" style="font-size:13px">Esta urna também recebe os eleitores das seções agregadas ${A.esc(s.agregadas.split(',').join(', '))}. Lance o boletim uma vez só, nesta seção.</div>` : ''}
+    ${fav ? '<div class="muted" style="font-size:12px">Mostrando só os favoritos de cada cargo. Campo vazio mantém o valor já lançado. Para lançar brancos, nulos ou outros candidatos, escolha o cargo em “Listar”.</div>' : ''}
+    ${gs.map(bloco).join('')}
+    <div class="check" id="check"></div>
+    <div class="actions">
+      ${unico ? '<button class="btn bad" id="del">Excluir lançamento</button>' : ''}
+      <button class="btn" id="rasc">Salvar rascunho</button>
+      <button class="btn pri" id="salvar">Salvar e ir para a próxima</button>
+    </div>
+    <div class="muted" style="font-size:12px">Tab ou Enter passam de campo em campo. Enter no último campo salva. O total é somado automaticamente.</div>`;
+  atualizarCheck();
+}
+
+const nz = v => (v === '' || v == null ? null : Number(v));
+
+// Soma por cargo: o que já está salvo, sobreposto pelo que está digitado.
+function totalCargo(g, campos, s) {
+  const bo = A.boletim(s.id, g.cargo.id), c = campos[g.cargo.id] || { votos: {} };
+  let soma = 0, digitou = false;
+  for (const cand of A.candidatosDe(g.cargo.id)) {
+    const d = c.votos[cand.id];
+    if (d !== undefined && d !== '') { soma += Number(d); digitou = true; } else soma += bo?.votos?.[cand.id] || 0;
+  }
+  for (const k of ['legenda', 'brancos', 'nulos']) {
+    const d = c[k];
+    if (d !== undefined && d !== '') { soma += Number(d); digitou = true; } else soma += bo?.[k] || 0;
+  }
+  return { soma, digitou };
+}
+
+function atualizarCheck() {
+  const s = A.secaoPorId(sel); if (!s || !$('check')) return;
+  const campos = lerCampos(); rascunhoLocal[`${s.id}|${modo}`] = campos;
+  let algum = false, erro = false;
+  const linhas = [];
+  for (const g of grupos()) {
+    const { soma, digitou } = totalCargo(g, campos, s);
+    const limite = s.aptos * g.cargo.vagas, acima = s.aptos > 0 && soma > limite;
+    algum ||= digitou; erro ||= acima;
+    const el = document.querySelector(`[data-tot="${g.cargo.id}"]`);
+    if (el) { el.textContent = `total ${A.fmt(soma)}`; el.classList.toggle('no', acima); }
+    if (acima) linhas.push(`${g.cargo.nome}: ${A.fmt(soma)} votos, mais que ${A.fmt(limite)} (aptos${g.cargo.vagas > 1 ? ' × ' + g.cargo.vagas : ''})`);
+  }
+  const ok = algum && !erro;
+  $('check').innerHTML = ok ? '<span class="ok">✓ Pode salvar</span>' : erro ? `<span class="no">Mais votos que eleitores aptos, confira: ${A.esc(linhas.join(' · '))}</span>` : '<span class="no">Digite os votos</span>';
+  $('salvar').disabled = !ok;
+}
+
+async function salvar(status) {
+  await A.pedirLogin();
+  const s = A.secaoPorId(sel), campos = lerCampos(), fav = modoFav();
+  try {
+    for (const g of grupos()) {
+      const c = campos[g.cargo.id] || { votos: {} };
+      const votos = Object.fromEntries(Object.entries(c.votos).filter(([, v]) => v !== '').map(([k, v]) => [k, Number(v)]));
+      const extras = {};
+      for (const k of ['legenda', 'brancos', 'nulos']) if (nz(c[k]) != null) extras[k] = nz(c[k]);
+      if (!Object.keys(votos).length && !Object.keys(extras).length) continue; // nada digitado neste cargo
+      await A.enviar('POST', '/api/boletim', { secao_id: s.id, cargo_id: g.cargo.id, status, parcial: true, votos, ...extras });
+    }
+    delete rascunhoLocal[`${s.id}|${modo}`];
+    A.toast(status === 'apurada' ? 'Boletim salvo.' : 'Rascunho salvo.');
+    await A.carregar();
+    if (status === 'apurada') {
+      const prox = ordenadas().find(x => x.st !== 'apurada' && x.s.id !== sel);
+      if (prox) sel = prox.s.id;
+    }
+    history.replaceState(null, '', `?secao=${sel}`);
+    renderLista(); renderForm();
+    document.querySelector('[data-c]')?.focus();
+  } catch (e) { A.toast(e.message, true); }
+}
+
+document.addEventListener('click', async e => {
+  const li = e.target.closest('.li'); if (li) { sel = Number(li.dataset.s); history.replaceState(null, '', `?secao=${sel}`); renderLista(); renderForm(); document.querySelector('[data-c]')?.focus(); }
+  if (e.target.id === 'salvar') salvar('apurada');
+  if (e.target.id === 'rasc') salvar('rascunho');
+  if (e.target.id === 'del') {
+    if (e.target.dataset.sure !== '1') { e.target.dataset.sure = '1'; e.target.textContent = 'Confirmar exclusão'; return; }
+    await A.pedirLogin();
+    try { await A.enviar('DELETE', '/api/boletim', { secao_id: sel, cargo_id: grupos()[0].cargo.id }); A.toast('Lançamento excluído.'); await A.carregar(); renderLista(); renderForm(); } catch (er) { A.toast(er.message, true); }
+  }
+});
+document.addEventListener('input', e => { if (e.target.matches('.num')) { e.target.value = e.target.value.replace(/\D/g, ''); atualizarCheck(); } });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !e.target.matches('.num')) return;
+  e.preventDefault();
+  const campos = [...document.querySelectorAll('.num')], i = campos.indexOf(e.target);
+  if (i < campos.length - 1) campos[i + 1].focus(); else if (!$('salvar').disabled) salvar('apurada');
+});
+$('busca').oninput = e => { busca = e.target.value; renderLista(); };
+$('filtro').onchange = e => { filtro = e.target.value; renderLista(); };
+$('modo').onchange = e => { modo = e.target.value; try { localStorage.setItem('lancarModo', modo); } catch {} renderLista(); renderForm(); };
+
+await A.iniciar();
+A.menu('/lancar');
+try { modo = localStorage.getItem('lancarModo') || 'fav'; } catch {}
+montarSeletor();
+// ao receber dados novos, atualiza a lista; o formulário só é redesenhado se o usuário não estiver digitando
+A.aoMudar(() => { montarSeletor(); renderLista(); if (!document.activeElement?.matches?.('.num')) renderForm(); });
+renderLista(); renderForm();
+</script></body></html>

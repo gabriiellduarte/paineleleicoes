@@ -1,0 +1,214 @@
+<!doctype html><html lang="pt-BR"><head><title>Seções · Apuração Aracati</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/app.css">
+<style>
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);padding:20px;width:min(540px,calc(100vw - 32px));max-height:92vh;overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog form,.dgrid{display:grid;gap:12px}
+.txt{width:100%;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:8px 10px;font:500 14px var(--f-body)}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dots{display:inline-flex;gap:3px;vertical-align:middle}.dots i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.err{color:var(--bad);font-weight:600;min-height:1.2em}
+td .btn{padding:4px 10px;font-size:12px}
+td.acts{display:flex;gap:6px;justify-content:flex-end}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:10px;margin:0;min-width:0}
+legend{font:600 12px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:0 6px}
+.linkbox{display:flex;gap:8px}.linkbox input{flex:1;min-width:0;font:12px var(--f-mono)}
+</style></head>
+<body>
+<header class="topbar"><span class="live" id="live"></span></header>
+<main>
+  <div class="card">
+    <div class="card-h"><div><h2 id="h">Seções</h2><p class="muted" id="resumo"></p></div>
+      <div class="chips"><button class="chip on" data-v="secoes">Seções</button><button class="chip" data-v="locais">Locais de votação</button><button class="btn pri" id="novo" style="padding:6px 14px">Nova seção</button></div></div>
+    <div class="chips"><input class="inp" id="busca" placeholder="Buscar seção, local ou endereço…" style="flex:1;min-width:200px"><select class="sel" id="fl" aria-label="Local"></select><button class="btn" id="link-fl" style="padding:6px 12px;font-size:13px" hidden>Link do chefe deste local</button></div>
+    <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+    <p class="muted" style="font-size:12px">Reimportar do TSE em Cadastro sobrescreve aptos, local e coordenadas das seções que vêm do arquivo. Faça as correções manuais depois da última importação.</p>
+  </div>
+</main>
+
+<dialog id="dl"><form method="dialog" id="f">
+  <h2 id="t">Editar seção</h2>
+  <div class="f2"><div class="fld"><label for="e-zona">Zona</label><input class="txt mono" id="e-zona" inputmode="numeric" required></div><div class="fld"><label for="e-num">Seção</label><input class="txt mono" id="e-num" inputmode="numeric" required></div></div>
+  <div class="f2"><div class="fld"><label for="e-aptos">Eleitores aptos</label><input class="txt mono" id="e-aptos" inputmode="numeric"></div><div class="fld"><label for="e-agr">Seções agregadas</label><input class="txt mono" id="e-agr" placeholder="ex.: 13,14"></div></div>
+  <fieldset>
+    <legend>Local de votação</legend>
+    <div class="fld"><label for="e-local">Local</label><select class="txt" id="e-local"></select></div>
+    <div class="fld"><label for="l-nome">Nome do local</label><input class="txt" id="l-nome" required></div>
+    <div class="fld"><label for="l-end">Endereço</label><input class="txt" id="l-end"></div>
+    <div class="f2"><div class="fld"><label for="e-lat">Latitude</label><input class="txt mono" id="e-lat" placeholder="-4,5617"></div><div class="fld"><label for="e-lng">Longitude</label><input class="txt mono" id="e-lng" placeholder="-37,7697"></div></div>
+    <div class="muted" style="font-size:12px" id="l-info"></div>
+  </fieldset>
+  <div class="err" id="er"></div>
+  <div class="actions" style="justify-content:space-between"><button type="button" class="btn bad" id="del">Excluir seção</button><span style="display:flex;gap:8px"><button type="button" class="btn" data-fechar>Cancelar</button><button class="btn pri">Salvar</button></span></div>
+</form></dialog>
+
+<dialog id="dl-local"><form method="dialog" id="f-local">
+  <h2 id="t-local">Editar local</h2>
+  <div class="fld"><label for="lo-nome">Nome</label><input class="txt" id="lo-nome" required></div>
+  <div class="fld"><label for="lo-end">Endereço</label><input class="txt" id="lo-end"></div>
+  <div class="f2"><div class="fld"><label for="lo-lat">Latitude</label><input class="txt mono" id="lo-lat" placeholder="-4,5617"></div><div class="fld"><label for="lo-lng">Longitude</label><input class="txt mono" id="lo-lng" placeholder="-37,7697"></div></div>
+  <div class="muted" style="font-size:12px">Sem coordenadas o local não aparece no mapa. Dá para copiar do Google Maps (clique direito no ponto).</div>
+  <div id="lo-secoes" class="muted" style="font-size:13px"></div>
+  <div class="err" id="er-local"></div>
+  <div class="actions" style="justify-content:space-between"><button type="button" class="btn bad" id="del-local">Excluir local</button><span style="display:flex;gap:8px"><button type="button" class="btn" data-fechar>Cancelar</button><button class="btn pri">Salvar</button></span></div>
+</form></dialog>
+
+<dialog id="dl-link"><div class="dgrid">
+  <h2>Link do chefe de local</h2>
+  <p id="lk-local" style="font-weight:600"></p>
+  <p class="muted" style="font-size:13px">Quem abrir este link vê só as seções deste local e digita os votos dos candidatos favoritos. Não precisa de PIN nem de senha. Mande por WhatsApp.</p>
+  <div class="linkbox"><input class="txt" id="lk-url" readonly><button class="btn pri" id="lk-copiar">Copiar</button></div>
+  <div class="warnbox" style="font-size:13px" id="lk-aviso"></div>
+  <div class="err" id="lk-erro"></div>
+  <div class="actions" style="justify-content:space-between"><button class="btn bad" id="lk-novo">Gerar novo link (o atual deixa de funcionar)</button><button class="btn" data-fechar>Fechar</button></div>
+</div></dialog>
+
+<script type="module">
+import * as A from '/app.js';
+const $ = id => document.getElementById(id);
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const pad = n => String(n).padStart(4, '0');
+const virg = v => (v != null ? String(v).replace('.', ',') : '');
+let vista = 'secoes', busca = '', fLocal = '', edit = null, editL = null, confirmDel = false, linkLocal = null;
+
+const dots = id => `<span class="dots" title="Presidente, governador, senador, dep. federal, dep. estadual">${A.D.cargos.map(c => `<i style="background:${A.COR_STATUS[A.statusSecao(id, c.id)]}"></i>`).join('')}</span>`;
+
+function render() {
+  const b = norm(busca), secoesView = vista === 'secoes';
+  document.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('on', x.dataset.v === vista));
+  $('h').textContent = secoesView ? 'Seções' : 'Locais de votação';
+  $('novo').textContent = secoesView ? 'Nova seção' : 'Novo local';
+  $('fl').hidden = !secoesView; $('link-fl').hidden = !secoesView || !fLocal;
+  if ($('fl').options.length !== A.D.locais.length + 1) $('fl').innerHTML = '<option value="">Todos os locais</option>' + A.D.locais.map(l => `<option value="${l.id}">${A.esc(l.nome)}</option>`).join('');
+  $('fl').value = fLocal;
+  if (secoesView) {
+    const lista = A.D.secoes.filter(s => {
+      const l = A.localPorId(s.local_id);
+      return (!fLocal || s.local_id === Number(fLocal)) && (!b || String(s.numero).includes(b) || norm(l?.nome).includes(b) || norm(l?.endereco).includes(b));
+    });
+    $('resumo').textContent = `${lista.length} de ${A.D.secoes.length} seções · ${A.D.locais.length} locais`;
+    $('thead').innerHTML = '<tr><th>Zona/Seção</th><th>Local de votação</th><th>Endereço</th><th class="r">Aptos</th><th>Agregadas</th><th title="Um ponto por cargo">Apuração</th><th></th></tr>';
+    $('tbody').innerHTML = lista.map(s => {
+      const l = A.localPorId(s.local_id);
+      return `<tr><td class="mono">${s.zona}/${pad(s.numero)}</td><td>${A.esc(l?.nome)}</td><td class="muted">${A.esc(l?.endereco)}</td><td class="r mono">${A.fmt(s.aptos)}</td><td class="mono">${A.esc(s.agregadas || '—')}</td><td>${dots(s.id)}</td><td class="acts"><a class="btn" href="/lancar?secao=${s.id}" style="text-decoration:none">Lançar</a><button class="btn" data-es="${s.id}">Editar</button></td></tr>`;
+    }).join('') || '<tr><td colspan="7" class="empty">Nenhuma seção encontrada.</td></tr>';
+  } else {
+    const lista = A.D.locais.filter(l => !b || norm(l.nome).includes(b) || norm(l.endereco).includes(b));
+    $('resumo').textContent = `${lista.length} de ${A.D.locais.length} locais · ${A.D.locais.filter(l => l.lat == null).length} sem coordenadas`;
+    $('thead').innerHTML = '<tr><th>Local de votação</th><th>Endereço</th><th class="r">Seções</th><th class="r">Aptos</th><th>Coordenadas</th><th></th></tr>';
+    $('tbody').innerHTML = lista.map(l => {
+      const ss = A.D.secoes.filter(s => s.local_id === l.id);
+      return `<tr><td>${A.esc(l.nome)}</td><td class="muted">${A.esc(l.endereco)}</td><td class="r mono">${ss.length}</td><td class="r mono">${A.fmt(ss.reduce((t, s) => t + s.aptos, 0))}</td><td class="mono">${l.lat != null ? l.lat.toFixed(5) + ', ' + l.lng.toFixed(5) : '<span style="color:var(--warn)">sem coordenadas</span>'}</td><td class="acts"><button class="btn" data-ln="${l.id}">Link do chefe</button><button class="btn" data-el="${l.id}">Editar</button></td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty">Nenhum local encontrado.</td></tr>';
+  }
+}
+
+/* ---------- edição de seção (com dados do local) ---------- */
+function preencherLocal() {
+  const v = $('e-local').value, novo = v === 'novo', l = novo ? null : A.localPorId(Number(v));
+  $('l-nome').value = l?.nome ?? ''; $('l-end').value = l?.endereco ?? '';
+  $('e-lat').value = virg(l?.lat); $('e-lng').value = virg(l?.lng);
+  const n = l ? A.D.secoes.filter(s => s.local_id === l.id).length : 0;
+  $('l-info').innerHTML = novo ? 'Novo local: preencha nome, endereço e coordenadas.' : `Alterar nome, endereço ou coordenadas vale para as ${n} seç${n === 1 ? 'ão' : 'ões'} deste local. Para um ponto diferente, escolha “Novo local”.`;
+}
+function abrir(s) {
+  edit = s || null; confirmDel = false;
+  $('t').textContent = s ? `Editar seção ${s.zona}/${pad(s.numero)}` : 'Nova seção';
+  $('e-local').innerHTML = A.D.locais.map(l => `<option value="${l.id}">${A.esc(l.nome)}</option>`).join('') + '<option value="novo">➕ Novo local…</option>';
+  $('e-local').value = s?.local_id ?? (fLocal || A.D.locais[0]?.id);
+  $('e-zona').value = s?.zona ?? (A.D.secoes[0]?.zona ?? ''); $('e-num').value = s?.numero ?? '';
+  $('e-aptos').value = s?.aptos ?? 0; $('e-agr').value = s?.agregadas ?? '';
+  preencherLocal();
+  $('del').hidden = !s; $('del').textContent = 'Excluir seção'; $('er').textContent = '';
+  $('dl').showModal(); $('e-num').focus();
+}
+
+/* ---------- edição de local ---------- */
+function abrirLocal(l) {
+  editL = l || null; confirmDel = false;
+  $('t-local').textContent = l ? 'Editar local' : 'Novo local';
+  $('lo-nome').value = l?.nome ?? ''; $('lo-end').value = l?.endereco ?? '';
+  $('lo-lat').value = virg(l?.lat); $('lo-lng').value = virg(l?.lng);
+  const ss = l ? A.D.secoes.filter(s => s.local_id === l.id) : [];
+  $('lo-secoes').innerHTML = l ? (ss.length ? `<b>${ss.length} seç${ss.length > 1 ? 'ões' : 'ão'} neste local:</b> ${ss.map(s => s.zona + '/' + pad(s.numero)).join(', ')}. Para mover uma seção, edite-a na aba Seções.` : 'Nenhuma seção neste local.') : '';
+  $('del-local').hidden = !l; $('del-local').textContent = 'Excluir local'; $('er-local').textContent = '';
+  $('dl-local').showModal(); $('lo-nome').focus();
+}
+
+/* ---------- link do chefe ---------- */
+async function abrirLink(localId, regenerar = false) {
+  linkLocal = A.localPorId(localId);
+  $('lk-local').textContent = linkLocal.nome; $('lk-erro').textContent = '';
+  await A.pedirLogin();
+  try {
+    const r = await A.enviar('POST', '/api/admin/link', { local_id: localId, regenerar });
+    $('lk-url').value = r.url;
+    const local = /localhost|127\.0\.0\.1|^http:\/\/(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(r.url);
+    $('lk-aviso').innerHTML = local ? `Este endereço (<b>${A.esc(r.base)}</b>) só abre para quem estiver no mesmo Wi-Fi que este computador. Para chefes fora dele, defina o endereço público em <a href="/admin">Cadastro</a> e gere o link de novo.` : `Endereço usado: <b>${A.esc(r.base)}</b>. Pode mudar em <a href="/admin">Cadastro</a>.`;
+    if (!$('dl-link').open) $('dl-link').showModal();
+    $('lk-url').select();
+  } catch (e) { A.toast(e.message, true); }
+}
+
+document.addEventListener('click', async e => {
+  const t = e.target;
+  if (t.dataset.v) { vista = t.dataset.v; busca = ''; $('busca').value = ''; render(); }
+  if (t.id === 'novo') vista === 'secoes' ? abrir() : abrirLocal();
+  if (t.dataset.es) abrir(A.secaoPorId(Number(t.dataset.es)));
+  if (t.dataset.el) abrirLocal(A.localPorId(Number(t.dataset.el)));
+  if (t.dataset.ln) abrirLink(Number(t.dataset.ln));
+  if (t.id === 'link-fl') abrirLink(Number(fLocal));
+  if (t.id === 'lk-novo') {
+    if (t.dataset.sure !== '1') { t.dataset.sure = '1'; t.textContent = 'Confirmar: o link atual será desativado'; return; }
+    t.dataset.sure = ''; t.textContent = 'Gerar novo link (o atual deixa de funcionar)'; abrirLink(linkLocal.id, true);
+  }
+  if (t.id === 'lk-copiar') {
+    $('lk-url').select();
+    try { await navigator.clipboard.writeText($('lk-url').value); A.toast('Link copiado.'); } catch { document.execCommand?.('copy'); A.toast('Selecione e copie o link (Ctrl+C).'); }
+  }
+  if (t.dataset.fechar !== undefined) t.closest('dialog').close();
+  if (t.id === 'del') {
+    if (!confirmDel) { confirmDel = true; const n = A.D.cargos.filter(c => A.boletim(edit.id, c.id)).length; t.textContent = n ? `Confirmar (apaga ${n} boletim${n > 1 ? 's' : ''})` : 'Confirmar exclusão'; return; }
+    await A.pedirLogin();
+    try { await A.enviar('DELETE', '/api/secao', { id: edit.id }); $('dl').close(); A.toast('Seção excluída.'); await A.carregar(); } catch (er) { $('er').textContent = er.message; }
+  }
+  if (t.id === 'del-local') {
+    if (!confirmDel) { confirmDel = true; t.textContent = 'Confirmar exclusão'; return; }
+    await A.pedirLogin();
+    try { await A.enviar('DELETE', '/api/local', { id: editL.id }); $('dl-local').close(); A.toast('Local excluído.'); await A.carregar(); } catch (er) { $('er-local').textContent = er.message; }
+  }
+});
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  await A.pedirLogin();
+  try {
+    let localId = $('e-local').value;
+    const d = { nome: $('l-nome').value, endereco: $('l-end').value, lat: $('e-lat').value, lng: $('e-lng').value };
+    if (localId === 'novo') localId = (await A.enviar('POST', '/api/local', d)).id;
+    else {
+      const l = A.localPorId(Number(localId));
+      if (l.nome !== d.nome.trim() || (l.endereco || '') !== d.endereco || virg(l.lat) !== d.lat.trim() || virg(l.lng) !== d.lng.trim()) await A.enviar('POST', '/api/local', { id: l.id, ...d });
+    }
+    await A.enviar('POST', '/api/secao', { id: edit?.id, zona: $('e-zona').value, numero: $('e-num').value, local_id: localId, aptos: $('e-aptos').value, agregadas: $('e-agr').value });
+    $('dl').close(); A.toast('Salvo.'); await A.carregar();
+  } catch (er) { $('er').textContent = er.message; }
+};
+$('f-local').onsubmit = async e => {
+  e.preventDefault();
+  await A.pedirLogin();
+  try {
+    await A.enviar('POST', '/api/local', { id: editL?.id, nome: $('lo-nome').value, endereco: $('lo-end').value, lat: $('lo-lat').value, lng: $('lo-lng').value });
+    $('dl-local').close(); A.toast('Salvo.'); await A.carregar();
+  } catch (er) { $('er-local').textContent = er.message; }
+};
+$('e-local').onchange = preencherLocal;
+$('busca').oninput = e => { busca = e.target.value; render(); };
+$('fl').onchange = e => { fLocal = e.target.value; render(); };
+
+await A.iniciar();
+A.menu('/secoes');
+A.aoMudar(() => { $('fl').innerHTML = ''; render(); });
+render();
+</script></body></html>

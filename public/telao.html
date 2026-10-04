@@ -1,0 +1,99 @@
+<!doctype html><html lang="pt-BR"><head><title>Telão · Apuração Aracati</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{color-scheme:light}
+html,body{height:100%;overflow:hidden;background:#f3f6f5;color:#12201c}
+.tv{--mut:#667771;--line:#dce4e1;--acc:#0b6e5a;--card:#ffffff;--ink2:#12201c;height:100%;padding:clamp(14px,2vw,32px);display:grid;grid-template-rows:auto 1fr auto;gap:clamp(10px,1.6vw,22px)}
+.tv-h{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.tv-h .k{font:500 clamp(12px,1.2vw,18px) var(--f-mono);color:var(--mut);letter-spacing:.1em;text-transform:uppercase}
+.tv-h h1{color:var(--ink2);font:800 clamp(24px,3.6vw,56px) var(--f-display)}
+.tv-h .hora{font:500 clamp(14px,1.6vw,24px) var(--f-mono);color:var(--mut);text-align:right}
+.tv-main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,auto) minmax(0,1fr);gap:clamp(10px,1.6vh,24px);min-height:0}
+.tv-c{display:flex;flex-direction:column;gap:clamp(10px,1.8vh,26px);justify-content:center;min-height:0}
+.row{display:grid;grid-template-columns:clamp(46px,6vw,100px) minmax(0,1fr) auto;gap:4px clamp(8px,1.2vw,18px);align-items:center}
+.row .num{font:500 clamp(18px,2.8vw,44px) var(--f-mono);color:var(--mut)}
+.row .nm{font:600 clamp(16px,2.4vw,38px) var(--f-display);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .pc{font:500 clamp(22px,3.8vw,64px) var(--f-mono);font-variant-numeric:tabular-nums}
+.row .tr{grid-column:2/-1;height:clamp(10px,1.6vh,20px);background:var(--line);border-radius:99px;overflow:hidden}
+.row .tr i{display:block;height:100%;border-radius:99px;transition:width .8s}
+.row small{grid-column:2/-1;font:400 clamp(11px,1.2vw,18px) var(--f-mono);color:var(--mut)}
+.row.foco .nm,.row.foco .pc{color:var(--acc)}
+.tv-side{display:flex;flex-direction:column;gap:clamp(8px,1.4vh,16px);min-width:0;min-height:0}
+.big{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.stat{display:flex;align-items:center;gap:clamp(12px,2vw,32px);flex-wrap:wrap}.stat .prog{flex:1;min-width:160px}
+.big b{font:500 clamp(28px,4vw,64px) var(--f-mono);color:var(--acc);line-height:1}
+.big span{color:var(--mut);font-size:clamp(12px,1.4vw,22px)}
+.prog{height:clamp(8px,1.2vh,14px);background:var(--line);border-radius:99px;overflow:hidden}.prog i{display:block;height:100%;background:var(--acc);transition:width .8s}
+#map{flex:1;min-height:120px;border-radius:16px;background:#e3eae7;border:1px solid var(--line);box-shadow:0 1px 2px rgba(18,32,28,.05),0 8px 24px rgba(18,32,28,.06)}
+.foot{display:flex;gap:28px;overflow:hidden;white-space:nowrap;border-top:1px solid var(--line);padding-top:12px;font:400 clamp(12px,1.4vw,20px) var(--f-mono);color:var(--mut)}
+.foot b{color:var(--ink2);font-weight:600}
+.mini{font:400 clamp(11px,1.2vw,18px) var(--f-mono);color:var(--mut)}
+@media (max-width:760px){html,body{overflow:auto}#map{min-height:240px}}
+.tv-c{overflow:hidden}
+.grid-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:clamp(10px,1.6vw,26px);align-content:center;min-height:0}
+.g{display:flex;flex-direction:column;gap:clamp(4px,.8vh,10px);min-width:0;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:clamp(10px,1.4vw,22px);box-shadow:0 1px 2px rgba(18,32,28,.05),0 8px 24px rgba(18,32,28,.06)}
+.g-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.g-h h3{font:800 clamp(14px,1.7vw,26px) var(--f-display);color:var(--ink2);letter-spacing:.01em}
+.g-h span{font:400 clamp(10px,1vw,15px) var(--f-mono);color:var(--mut)}
+.r2{display:grid;grid-template-columns:clamp(56px,6.4vw,104px) minmax(0,1fr) auto;gap:clamp(6px,1vw,16px);align-items:center;padding:clamp(1px,.4vh,6px) 0}
+.r2 .nb{font:500 clamp(12px,1.4vw,22px) var(--f-mono);color:#fff;border-radius:8px;padding:clamp(2px,.4vh,6px) 0;text-align:center;letter-spacing:.02em}
+.r2 .nm{color:var(--ink2);font:600 clamp(14px,1.9vw,30px) var(--f-display);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r2 .vt{color:var(--ink2);font:500 clamp(20px,3vw,48px) var(--f-mono);font-variant-numeric:tabular-nums;line-height:1.1}
+.r2.foco .nm,.r2.foco .vt{color:var(--acc)}
+</style></head>
+<body>
+<div class="tv">
+  <div class="tv-h">
+    <div><div class="k" id="k"></div><h1>Apuração em tempo real</h1></div>
+    <div class="hora"><div id="hora"></div><div id="live" class="live" style="justify-content:flex-end"></div></div>
+  </div>
+  <div class="tv-main">
+    <div class="tv-c" id="rank"></div>
+    <div class="tv-side">
+      <div class="stat"><div class="big"><b id="pct">0%</b><span id="sub"></span></div>
+        <div class="prog"><i id="prog" style="width:0"></i></div>
+        <div class="mini" id="mini"></div></div>
+      <div id="map"></div>
+    </div>
+  </div>
+  <div class="foot" id="foot"></div>
+</div>
+<script type="module">
+import * as A from '/app.js';
+const $ = id => document.getElementById(id);
+const q = new URLSearchParams(location.search);
+const foco = q.get('foco');          // número do candidato em destaque
+const auto = q.get('auto') === '1';   // gira entre cargos a cada 20s
+let cargo = null, idx = 0, mapa;
+
+function render() {
+  // Favoritos de todos os cargos de uma vez; sem favoritos, os 10 primeiros do cargo em exibição.
+  const grupos = A.D.cargos.map(c => ({ c, r: A.resultado(c.id) })).filter(g => g.r.modo === 'favoritos');
+  const lista = grupos.length ? grupos : [{ c: A.D.cargos.find(x => x.id === cargo), r: A.resultado(cargo) }];
+  const linha = c => `<div class="r2 ${foco && c.numero === foco ? 'foco' : ''}"><span class="nb" style="background:${c.cor}">${A.esc(c.numero)}</span><span class="nm">${A.esc(c.nome)}</span><span class="vt">${A.fmt(c.votos)}</span></div>`;
+  $('rank').innerHTML = `<div class="grid-g">${lista.map(g => `<div class="g"><div class="g-h"><h3>${A.esc(g.c?.nome || '')}</h3><span>${g.r.apuradas}/${g.r.secoesTotal} seções</span></div>${g.r.exibidos.map(linha).join('') || '<div class="empty">Sem candidatos.</div>'}</div>`).join('')}</div>`;
+  // Mapa e andamento: do cargo com mais seções apuradas entre os exibidos.
+  const base = lista.reduce((m, g) => (g.r.apuradas > m.r.apuradas ? g : m), lista[0]);
+  const res = base.r, ref = base.c?.id || cargo;
+  $('k').textContent = `${A.D.config.municipio || 'Aracati'} · ${grupos.length ? 'Favoritos' : base.c?.nome} · 1º turno`;
+  $('pct').textContent = A.pct(res.apuradas, res.secoesTotal);
+  $('sub').textContent = `das seções apuradas · ${res.apuradas} de ${res.secoesTotal}`;
+  $('prog').style.width = (res.secoesTotal ? res.apuradas / res.secoesTotal * 100 : 0) + '%';
+  $('mini').textContent = grupos.length > 1 ? `andamento do cargo ${base.c.nome}` : '';
+  A.desenharLocais(mapa, ref);
+  const ult = A.D.boletins.filter(b => b.status === 'apurada').sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 6);
+  $('foot').innerHTML = ult.length ? '<span>Últimas:</span>' + ult.map(b => { const s = A.secaoPorId(b.secao_id); return `<span><b>Seção ${String(s?.numero).padStart(4, '0')}</b> ${A.esc(A.localPorId(s?.local_id)?.nome)}</span>`; }).join('') : '<span>Aguardando os primeiros boletins…</span>';
+}
+setInterval(() => { $('hora').textContent = new Date().toLocaleTimeString('pt-BR'); }, 1000);
+await A.iniciar();
+cargo = q.get('cargo') || A.D.cargos[0]?.id;
+mapa = A.criarMapa($('map'), true);
+A.aoMudar(render); render();
+setTimeout(() => mapa?.invalidateSize(), 300);
+addEventListener('resize', () => mapa?.invalidateSize());
+if (auto) setInterval(() => { if (A.D.cargos.some(c => A.resultado(c.id).modo === 'favoritos')) return; idx = (idx + 1) % A.D.cargos.length; cargo = A.D.cargos[idx].id; if (mapa) mapa._ajustado = false; render(); }, 20000);
+</script></body></html>

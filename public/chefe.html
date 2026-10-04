@@ -1,0 +1,146 @@
+<!doctype html><html lang="pt-BR"><head><title>Lançar votos · Apuração Aracati</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/app.css">
+<style>
+main{max-width:680px}
+.top{display:flex;flex-direction:column;gap:6px}
+.top h1{font-size:24px;font-weight:800}
+.prog{height:8px;background:var(--line);border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:var(--ok);transition:width .4s}
+details.sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+details.sec>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 16px;min-height:56px}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec[open]>summary{border-bottom:1px solid var(--line)}
+.sn{font:800 20px var(--f-display)}.sa{font-size:12px;color:var(--muted)}
+.body2{padding:14px 16px;display:grid;gap:14px}
+.cg h3{font-size:15px;margin-bottom:2px}
+.cg .tot{font:500 12px var(--f-mono);color:var(--muted)}.cg .tot.no{color:var(--bad);font-weight:600}
+.vrow{grid-template-columns:52px minmax(0,1fr) 110px}
+.num{font-size:22px;padding:10px 12px}
+.enviar{width:100%;padding:14px;font-size:16px}
+.ok2{color:var(--ok);font-weight:600;font-size:13px}
+.msg{font-size:13px;color:var(--bad);font-weight:600;min-height:1.1em}
+.nome{flex-direction:column;align-items:stretch;gap:6px}
+.nome input{width:100%;font-size:16px;padding:10px 12px}
+.erro{padding:40px 16px;text-align:center}
+</style></head>
+<body>
+<main id="app"><div class="empty">Carregando…</div></main>
+<script type="module">
+const $ = id => document.getElementById(id);
+const t = new URLSearchParams(location.search).get('t') || '';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => (n ?? 0).toLocaleString('pt-BR');
+const pad = n => String(n).padStart(4, '0');
+let D = null, rascunho = {}, abertos = new Set(), msg = {};
+let nome = ''; try { nome = localStorage.getItem('chefe-nome') || ''; } catch {}
+
+async function carregar() {
+  const r = await fetch(`/api/chefe?t=${encodeURIComponent(t)}`, { cache: 'no-store' });
+  const j = await r.json();
+  if (!r.ok) { $('app').innerHTML = `<div class="erro card"><h2>Link indisponível</h2><p class="muted">${esc(j.erro || 'Não foi possível abrir.')}</p></div>`; D = null; return false; }
+  D = j; return true;
+}
+
+const bol = (sid, cid) => D.boletins.find(b => b.secao_id === sid && b.cargo_id === cid);
+const campo = (sid, cid, candId) => {
+  const d = rascunho[`${sid}|${cid}|${candId}`];
+  if (d !== undefined) return d;
+  const v = bol(sid, cid)?.votos?.[candId];
+  return v === undefined ? '' : v;
+};
+const enviada = s => D.grupos.length && D.grupos.every(g => bol(s.id, g.cargo.id)?.status === 'apurada');
+
+function render() {
+  if (!D) return;
+  if (!D.grupos.length) { $('app').innerHTML = '<div class="erro card"><h2>Ainda não há candidatos definidos</h2><p class="muted">A coordenação ainda não escolheu os candidatos a acompanhar. Volte a abrir este link daqui a pouco.</p></div>'; return; }
+  const feitas = D.secoes.filter(enviada).length;
+  const ordem = [...D.secoes].sort((a, b) => enviada(a) - enviada(b) || a.numero - b.numero);
+  $('app').innerHTML = `
+    <div class="top"><div class="mono muted" style="font-size:12px;letter-spacing:.06em">APURAÇÃO ${esc(D.municipio).toUpperCase()} · ELEIÇÕES 2026</div>
+      <h1>${esc(D.local.nome)}</h1>
+      <div class="muted">${esc([...new Set(String(D.local.endereco || '').split(' · '))].join(' · '))}</div>
+      <div class="prog" role="progressbar" aria-valuenow="${feitas}" aria-valuemax="${D.secoes.length}"><i style="width:${D.secoes.length ? feitas / D.secoes.length * 100 : 0}%"></i></div>
+      <div class="muted" style="font-size:13px">${feitas} de ${D.secoes.length} seção${D.secoes.length > 1 ? 'ões' : ''} enviada${feitas === 1 ? '' : 's'}</div></div>
+    <div class="card nome"><label for="nome" class="muted" style="font-size:13px">Seu nome</label><input class="inp" id="nome" value="${esc(nome)}" placeholder="Quem está lançando" autocomplete="name"></div>
+    ${ordem.map(s => {
+      const ok = enviada(s);
+      const open = abertos.has(s.id) || (!ok && !abertos.size && s === ordem[0]);
+      return `<details class="sec" data-s="${s.id}" ${open ? 'open' : ''}><summary><span><span class="sn">Seção ${pad(s.numero)}</span><br><span class="sa">${fmt(s.aptos)} eleitores aptos</span></span>${ok ? '<span class="ok2">✓ Enviada</span>' : '<span class="pill"><i class="s-wait"></i>Pendente</span>'}</summary>
+      <div class="body2">
+        ${s.agregadas ? `<div class="warnbox" style="font-size:13px">Esta urna também recebe os eleitores das seções ${esc(s.agregadas.split(',').join(', '))}. Lance uma vez só, aqui.</div>` : ''}
+        ${D.grupos.map(g => `<div class="cg"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h3>${esc(g.cargo.nome)}</h3><span class="tot" data-tot="${s.id}|${g.cargo.id}"></span></div>
+          <div class="votes">${g.candidatos.map(c => `<div class="vrow"><div class="sw" style="background:${c.cor}">${esc(c.numero)}</div><div style="min-width:0"><b>${esc(c.nome)}</b><div class="muted" style="font-size:12px">${esc(c.partido)}</div></div><input class="num" inputmode="numeric" pattern="[0-9]*" data-s="${s.id}" data-g="${g.cargo.id}" data-c="${c.id}" value="${campo(s.id, g.cargo.id, c.id)}" aria-label="Votos ${esc(c.nome)}"></div>`).join('')}</div></div>`).join('')}
+        <div class="msg" id="msg-${s.id}">${esc(msg[s.id] || '')}</div>
+        <button class="btn pri enviar" data-envia="${s.id}">${ok ? 'Atualizar votos desta seção' : 'Enviar votos desta seção'}</button>
+        ${ok ? `<div class="muted" style="font-size:12px;text-align:center">Último envio às ${new Date(Math.max(...D.grupos.map(g => +new Date(bol(s.id, g.cargo.id)?.updated_at || 0)))).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Se digitou errado, corrija e envie de novo.</div>` : ''}
+      </div></details>`;
+    }).join('')}`;
+  D.secoes.forEach(atualizarTotais);
+}
+
+function atualizarTotais(s) {
+  for (const g of D.grupos) {
+    let soma = 0;
+    document.querySelectorAll(`input[data-s="${s.id}"][data-g="${g.cargo.id}"]`).forEach(i => { soma += Number(i.value || 0); });
+    const el = document.querySelector(`[data-tot="${s.id}|${g.cargo.id}"]`);
+    const limite = s.aptos * g.cargo.vagas;
+    if (el) { el.textContent = soma ? `total ${fmt(soma)}` : ''; el.classList.toggle('no', soma > limite); }
+  }
+}
+
+async function enviar(sid) {
+  const s = D.secoes.find(x => x.id === sid);
+  if (!nome.trim()) { msg[sid] = 'Informe seu nome no topo da página.'; $(`msg-${sid}`).textContent = msg[sid]; $('nome').focus(); return; }
+  const btn = document.querySelector(`[data-envia="${sid}"]`); btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    let enviou = 0;
+    for (const g of D.grupos) {
+      const votos = {};
+      document.querySelectorAll(`input[data-s="${sid}"][data-g="${g.cargo.id}"]`).forEach(i => { if (i.value !== '') votos[i.dataset.c] = Number(i.value); });
+      if (!Object.keys(votos).length) continue;
+      const r = await fetch(`/api/chefe/boletim?t=${encodeURIComponent(t)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ secao_id: sid, cargo_id: g.cargo.id, votos, nome }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(`${g.cargo.nome}: ${j.erro}`);
+      enviou++;
+    }
+    if (!enviou) throw new Error('Digite os votos antes de enviar.');
+    Object.keys(rascunho).filter(k => k.startsWith(`${sid}|`)).forEach(k => delete rascunho[k]);
+    msg[sid] = ''; abertos.delete(sid);
+    await carregar();
+    const prox = D.secoes.find(x => !enviada(x));
+    if (prox) abertos = new Set([prox.id]);
+    render();
+    document.querySelector(`details[data-s="${prox?.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    msg[sid] = e.message; render();
+  }
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-envia]'); if (b) enviar(Number(b.dataset.envia));
+});
+document.addEventListener('toggle', e => { const d = e.target; if (d.matches?.('details.sec')) { const id = Number(d.dataset.s); d.open ? abertos.add(id) : abertos.delete(id); } }, true);
+document.addEventListener('input', e => {
+  const i = e.target;
+  if (i.id === 'nome') { nome = i.value; try { localStorage.setItem('chefe-nome', nome); } catch {} return; }
+  if (!i.dataset.c) return;
+  i.value = i.value.replace(/\D/g, '');
+  rascunho[`${i.dataset.s}|${i.dataset.g}|${i.dataset.c}`] = i.value;
+  atualizarTotais(D.secoes.find(x => x.id === Number(i.dataset.s)));
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !e.target.matches?.('input.num')) return;
+  e.preventDefault();
+  const campos = [...e.target.closest('details').querySelectorAll('input.num')], i = campos.indexOf(e.target);
+  if (i < campos.length - 1) campos[i + 1].focus(); else enviar(Number(e.target.dataset.s));
+});
+
+// atualiza quando outra pessoa (ou a coordenação) grava algo, sem atrapalhar quem está digitando
+const es = new EventSource('/api/stream');
+let timer;
+es.addEventListener('update', () => { clearTimeout(timer); timer = setTimeout(async () => { if (await carregar() && !document.activeElement?.matches?.('input')) render(); }, 400); });
+
+if (await carregar()) render();
+</script></body></html>

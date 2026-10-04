@@ -1,0 +1,97 @@
+<!doctype html><html lang="pt-BR"><head><title>Cadastro · Apuração Aracati</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/app.css"></head>
+<body>
+<header class="topbar"><span class="live" id="live"></span></header>
+<main>
+  <div id="demo"></div>
+  <div class="card">
+    <h2>Importar do TSE</h2>
+    <p class="muted">Busca direto no TSE os candidatos dos cinco cargos (presidente, governador, senador, deputado federal e estadual) e todas as seções, locais de votação, endereços, coordenadas e eleitores aptos do município. Dados de exemplo são apagados na primeira importação. Seções agregadas entram junto da seção principal, que é a que tem boletim próprio.</p>
+    <div class="fields" style="grid-template-columns:100px minmax(0,260px)">
+      <div class="fld"><label for="uf">UF</label><input class="num" style="text-align:left" id="uf" value="CE" maxlength="2"></div>
+      <div class="fld"><label for="mun">Município</label><input class="num" style="text-align:left" id="mun" value="Aracati"></div>
+    </div>
+    <div class="actions" style="justify-content:flex-start"><button class="btn pri" id="tse">Importar do TSE</button></div>
+    <div id="tse-res" class="muted" aria-live="polite"></div>
+  </div>
+  <h3 class="muted" style="margin-top:4px">Ou importe por planilha</h3>
+  <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+    <div class="card">
+      <h2>Importar seções</h2>
+      <p class="muted">Uma linha por seção, com cabeçalho. Separador ponto e vírgula, vírgula ou tab. Colunas: <span class="mono">zona;secao;local;endereco;lat;lng;aptos</span>. Reimportar atualiza sem duplicar. Lat/lng podem ficar em branco; o local só aparece no mapa quando tiver coordenadas.</p>
+      <textarea class="ta" id="csv-secoes" placeholder="zona;secao;local;endereco;lat;lng;aptos&#10;18;1;E.E.F.M. Cel. Alexandrino;Rua X, 100;-4.5612;-37.7701;312"></textarea>
+      <div class="actions"><input type="file" id="f-secoes" accept=".csv,.txt"><button class="btn pri" data-imp="secoes">Importar seções</button></div>
+    </div>
+    <div class="card">
+      <h2>Importar candidatos</h2>
+      <p class="muted">Colunas: <span class="mono">cargo;numero;nome;partido</span>. O cargo é um destes: <span class="mono" id="ids"></span>. As cores são atribuídas automaticamente.</p>
+      <textarea class="ta" id="csv-cands" placeholder="cargo;numero;nome;partido&#10;governador;13;Fulano de Tal;ABC"></textarea>
+      <div class="actions"><input type="file" id="f-cands" accept=".csv,.txt"><button class="btn pri" data-imp="candidatos">Importar candidatos</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Endereço dos links dos chefes</h2>
+    <p class="muted">Os links dos chefes de local usam este endereço. Se ficar em branco, o sistema usa o endereço da rede local (só funciona no mesmo Wi-Fi). Para chefes em outros lugares, o computador precisa estar acessível pela internet: cole aqui o endereço público (por exemplo, o que um túnel como o Cloudflare Tunnel gera). Depois, gere os links de novo.</p>
+    <div class="actions" style="justify-content:flex-start"><input class="inp" id="base" style="flex:1;min-width:240px" placeholder="https://seu-endereco.exemplo.com" value=""><button class="btn pri" id="base-salvar">Salvar endereço</button></div>
+    <div class="muted" id="base-info" aria-live="polite"></div>
+  </div>
+  <div class="card">
+    <h2>Situação atual</h2>
+    <div class="tw"><table><thead><tr><th>Cargo</th><th class="r">Candidatos</th><th class="r">Boletins lançados</th></tr></thead><tbody id="resumo"></tbody></table></div>
+    <div class="muted" id="totais"></div>
+  </div>
+  <div class="card">
+    <h2>Zerar</h2>
+    <p class="muted">Use antes da eleição para limpar testes. Apagar boletins mantém seções e candidatos. Apagar tudo remove também seções, locais e candidatos. Não há como desfazer.</p>
+    <div class="actions"><button class="btn bad" data-z="boletins">Apagar só os boletins</button><button class="btn bad" data-z="tudo">Apagar tudo (seções, candidatos e boletins)</button></div>
+  </div>
+</main>
+<script type="module">
+import * as A from '/app.js';
+const $ = id => document.getElementById(id);
+function render() {
+  $('demo').innerHTML = A.D.config.demo === '1' ? '<div class="warnbox"><b>Dados de exemplo.</b> Estas seções, locais e candidatos são fictícios, só para testar o sistema. Importe os reais abaixo e apague os de exemplo em “Zerar → Apagar tudo” antes de começar.</div>' : '';
+  if (!$('base').dataset.ok) { $('base').value = A.D.config.base_url || ''; $('base').dataset.ok = '1'; }
+  $('ids').textContent = A.D.cargos.map(c => c.id).join(', ');
+  $('resumo').innerHTML = A.D.cargos.map(c => `<tr><td>${A.esc(c.nome)}</td><td class="r mono">${A.candidatosDe(c.id).length}</td><td class="r mono">${A.D.boletins.filter(b => b.cargo_id === c.id && b.status === 'apurada').length}</td></tr>`).join('');
+  $('totais').textContent = `${A.D.secoes.length} seções em ${A.D.locais.length} locais de votação · ${A.D.locais.filter(l => l.lat != null).length} locais com coordenadas no mapa.`;
+}
+document.addEventListener('change', e => {
+  if (!e.target.matches('input[type=file]')) return;
+  const alvo = e.target.id === 'f-secoes' ? 'csv-secoes' : 'csv-cands';
+  const f = e.target.files[0]; if (f) f.text().then(t => $(alvo).value = t);
+});
+document.addEventListener('click', async e => {
+  if (e.target.id === 'tse') {
+    await A.pedirLogin();
+    const b = e.target, r = $('tse-res'); b.disabled = true; b.textContent = 'Importando…';
+    r.textContent = 'Baixando do TSE. O arquivo de seções é grande; na primeira vez pode levar alguns minutos. Não feche esta página.';
+    try {
+      const x = await A.enviar('POST', '/api/admin/importar-tse', { uf: $('uf').value.trim().toUpperCase(), municipio: $('mun').value.trim() });
+      r.innerHTML = `<b style="color:var(--ok)">Importação concluída.</b> ${x.candidatos} candidatos, ${x.secoes} seções com boletim (${x.agregadas} agregadas somadas às principais) em ${x.locais} locais, ${x.comCoordenadas} com coordenadas no mapa.${x.limpouExemplo ? ' Dados de exemplo apagados.' : ''}${x.removidos ? ` ${x.removidos} candidato(s) fora da lista removido(s).` : ''}${x.avisos?.length ? '<br>Aviso: ' + x.avisos.map(A.esc).join(' ') : ''}`;
+      await A.carregar();
+    } catch (er) { r.innerHTML = `<b style="color:var(--bad)">Falhou:</b> ${A.esc(er.message)}`; }
+    b.disabled = false; b.textContent = 'Importar do TSE'; return;
+  }
+  const imp = e.target.dataset.imp, z = e.target.dataset.z;
+  if (e.target.id === 'base-salvar') {
+    await A.pedirLogin();
+    try { const r = await A.enviar('POST', '/api/admin/config', { base_url: $('base').value }); $('base-info').textContent = `Salvo. Os links agora usam ${r.base}`; await A.carregar(); } catch (er) { A.toast(er.message, true); }
+  }
+  if (imp) {
+    await A.pedirLogin();
+    try { const r = await A.enviar('POST', '/api/admin/importar', { tipo: imp, csv: $(imp === 'secoes' ? 'csv-secoes' : 'csv-cands').value }); A.toast(`${r.n} linhas importadas.`); await A.carregar(); } catch (er) { A.toast(er.message, true); }
+  }
+  if (z) {
+    if (e.target.dataset.sure !== '1') { e.target.dataset.sure = '1'; e.target.textContent = 'Clique de novo para confirmar'; return; }
+    await A.pedirLogin();
+    try { await A.enviar('POST', '/api/admin/zerar', { escopo: z }); A.toast('Dados apagados.'); await A.carregar(); } catch (er) { A.toast(er.message, true); }
+    e.target.dataset.sure = ''; e.target.textContent = z === 'tudo' ? 'Apagar tudo (seções, candidatos e boletins)' : 'Apagar só os boletins';
+  }
+});
+await A.iniciar();
+A.menu('/admin');
+A.aoMudar(render); render();
+</script></body></html>

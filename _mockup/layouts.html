@@ -1,0 +1,335 @@
+<title>Apuração Aracati 2026</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: abas com 4 telas mockadas (Plano, Dashboard, Lançar BU, Telão). Dados são exemplos. */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --ink:#14201d; --muted:#5d6b67; --line:#d9e0dd;
+  --accent:#0b6e5a; --accent-ink:#ffffff;
+  --ok:#1f8a4c; --warn:#c77a0a; --wait:#8a9692; --bad:#c23b3b;
+  --c1:#0b6e5a; --c2:#d4572a; --c3:#3d5fc4; --c4:#9a7b1c; --c5:#8a4fa0;
+  --map:#e6ece9; --map-line:#c3cfca;
+  --f-display:'Bricolage Grotesque','Helvetica Neue',Arial,sans-serif;
+  --f-body:'IBM Plex Sans','Helvetica Neue',Arial,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1513; --surface:#151f1c; --ink:#e6eeeb; --muted:#93a39e; --line:#26342f;
+  --accent:#3cc4a3; --accent-ink:#06211a; --ok:#4cc27d; --warn:#e8a23a; --wait:#6c7b76; --bad:#ef7070;
+  --c1:#3cc4a3; --c2:#f07f55; --c3:#7b98ee; --c4:#d6b84f; --c5:#c08ad6;
+  --map:#1a2622; --map-line:#2c3d37; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1513; --surface:#151f1c; --ink:#e6eeeb; --muted:#93a39e; --line:#26342f;
+  --accent:#3cc4a3; --accent-ink:#06211a; --ok:#4cc27d; --warn:#e8a23a; --wait:#6c7b76; --bad:#ef7070;
+  --c1:#3cc4a3; --c2:#f07f55; --c3:#7b98ee; --c4:#d6b84f; --c5:#c08ad6;
+  --map:#1a2622; --map-line:#2c3d37; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:20px 48px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;line-height:1.1}
+h1{font-size:clamp(26px,4vw,38px);font-weight:800}
+h2{font-size:20px;font-weight:800}
+h3{font-size:15px;font-weight:600}
+p{margin:0}
+.muted{color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:end}
+.head p{max-width:60ch;color:var(--muted)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:10px}
+.tab{font:600 14px var(--f-body);padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.tab:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.screen[hidden]{display:none}
+.note{font-size:13px;color:var(--muted);border-left:3px solid var(--line);padding-left:12px;max-width:80ch}
+
+/* app frame */
+.app{background:var(--bg);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.topbar{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{font:800 16px var(--f-display);margin-right:auto}
+.brand small{display:block;font:400 11px var(--f-mono);color:var(--muted);letter-spacing:.04em}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav span{padding:6px 10px;border-radius:6px;font-weight:500;color:var(--muted)}
+.nav span.on{background:var(--bg);color:var(--ink)}
+.sel{border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:6px 10px;border-radius:6px;font:500 13px var(--f-body)}
+.live{display:inline-flex;gap:6px;align-items:center;font:500 12px var(--f-mono);color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.body{padding:16px;display:grid;gap:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.kpi b{display:block;font:500 26px var(--f-mono);font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--accent)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+@media (max-width:860px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.card-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.s-ok{background:var(--ok)}.s-part{background:var(--warn)}.s-wait{background:var(--wait)}
+svg text{font-family:var(--f-mono)}
+.map{width:100%;height:auto;display:block;border-radius:8px;background:var(--map)}
+
+/* ranking */
+.rank{display:flex;flex-direction:column;gap:12px}
+.cand{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center}
+.cand .n{font:500 12px var(--f-mono);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+.cand .name{font-weight:600;min-width:0}
+.cand .v{font:500 14px var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.cand .track{grid-column:1/-1;height:10px;background:var(--bg);border-radius:5px;overflow:hidden}
+.cand .track i{display:block;height:100%;border-radius:5px}
+
+/* table */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font:500 11px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.r,th.r{text-align:right}
+.pill{display:inline-flex;gap:6px;align-items:center;font:500 12px var(--f-body);padding:2px 9px;border-radius:99px;border:1px solid var(--line)}
+.pill i{width:7px;height:7px;border-radius:50%}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:4px 10px;border-radius:99px;border:1px solid var(--line);font-size:12px;background:var(--bg)}
+.chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* BU form */
+.bu{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:16px}
+@media (max-width:860px){.bu{grid-template-columns:minmax(0,1fr)}}
+.list{display:flex;flex-direction:column;max-height:560px;overflow:auto;margin:0 -14px;padding:0}
+.li{display:flex;justify-content:space-between;gap:8px;padding:9px 14px;border-top:1px solid var(--line);align-items:center}
+.li.on{background:var(--bg);box-shadow:inset 3px 0 0 var(--accent)}
+.li b{font:500 14px var(--f-mono)}
+.li small{display:block;color:var(--muted);font-size:12px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.fld label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.inp{width:100%;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:8px 10px;font:500 15px var(--f-mono);text-align:right}
+.votes{display:flex;flex-direction:column}
+.vrow{display:grid;grid-template-columns:44px minmax(0,1fr) 110px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.vrow .sw{width:44px;height:30px;border-radius:5px;display:grid;place-items:center;font:500 13px var(--f-mono);color:#fff}
+.check{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+.check .ok{color:var(--ok);font-weight:600}
+.btn{font:600 14px var(--f-body);padding:10px 16px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.photo{border:1px dashed var(--map-line);border-radius:8px;padding:12px;font-size:13px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* telão: sempre escuro */
+.tv{--t-bg:#08100e;--t-fg:#eef6f3;--t-mut:#8aa19a;--t-line:#1c2c27;--t-acc:#3cc4a3;
+  background:var(--t-bg);color:var(--t-fg);border-radius:12px;aspect-ratio:16/9;min-height:560px;padding:clamp(16px,2.4vw,32px);display:grid;grid-template-rows:auto 1fr auto;gap:clamp(12px,1.6vw,22px);border:1px solid var(--t-line)}
+.tv-h{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.tv-h h2{font-size:clamp(22px,3.2vw,44px);color:var(--t-fg)}
+.tv-h .mono{color:var(--t-mut);font-size:clamp(12px,1.2vw,16px)}
+.tv-main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:clamp(12px,2vw,28px);min-height:0}
+@media (max-width:760px){.tv{aspect-ratio:auto}.tv-main{grid-template-columns:minmax(0,1fr)}}
+.tv-c{display:flex;flex-direction:column;gap:clamp(10px,1.4vw,20px);justify-content:center}
+.tv-row{display:grid;grid-template-columns:clamp(40px,5vw,72px) minmax(0,1fr) auto;gap:6px 14px;align-items:center}
+.tv-row .num{font:500 clamp(18px,2.6vw,36px) var(--f-mono);color:var(--t-mut)}
+.tv-row .nm{font:600 clamp(16px,2.2vw,30px) var(--f-display);min-width:0}
+.tv-row .pc{font:500 clamp(22px,3.4vw,52px) var(--f-mono);font-variant-numeric:tabular-nums}
+.tv-row .tr{grid-column:2/-1;height:clamp(10px,1.4vw,18px);background:var(--t-line);border-radius:99px;overflow:hidden}
+.tv-row .tr i{display:block;height:100%;border-radius:99px}
+.tv-row small{grid-column:2/-1;font:400 clamp(11px,1.1vw,15px) var(--f-mono);color:var(--t-mut)}
+.tv-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.tv-map{background:#101c18;border-radius:10px;flex:1;min-height:0;padding:8px;display:grid}
+.tv-map svg{width:100%;height:100%}
+.tv-big{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tv-big b{font:500 clamp(34px,5vw,76px) var(--f-mono);color:var(--t-acc);line-height:1}
+.tv-big span{color:var(--t-mut);font-size:clamp(12px,1.3vw,18px)}
+.tv-foot{display:flex;gap:24px;overflow:hidden;white-space:nowrap;border-top:1px solid var(--t-line);padding-top:12px;font:400 clamp(12px,1.3vw,18px) var(--f-mono);color:var(--t-mut)}
+.tv-foot b{color:var(--t-fg);font-weight:500}
+
+/* plano */
+.plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.plan ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.q{display:flex;flex-direction:column;gap:10px}
+.q li{margin:0}
+</style>
+
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="mono muted" style="font-size:12px;letter-spacing:.06em">APURAÇÃO ARACATI · CE · ELEIÇÕES 2026</div>
+      <h1>Layouts para aprovação</h1>
+    </div>
+    <p>Quatro telas navegáveis nas abas abaixo. Os números e candidatos são exemplos só para mostrar a disposição. Nada aqui grava dados.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-t="plano">Plano</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="dash">1 · Dashboard e mapa</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="bu">2 · Lançar boletim</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="tv">3 · Telão</button>
+  </div>
+
+  <!-- PLANO -->
+  <section class="screen" id="s-plano">
+    <div class="plan">
+      <div class="card"><h2>O que o sistema faz</h2>
+        <ul>
+          <li>Cadastra as seções de Aracati (zona, número, local de votação, aptos).</li>
+          <li>Você digita o boletim de urna de cada seção, cargo por cargo.</li>
+          <li>O sistema confere a soma (votos + brancos + nulos = comparecimento) antes de salvar.</li>
+          <li>Dashboard e telão atualizam sozinhos a cada lançamento, sem recarregar.</li>
+        </ul></div>
+      <div class="card"><h2>Telas</h2>
+        <ul>
+          <li><b>Dashboard:</b> mapa das seções por status, ranking, tabela com filtros.</li>
+          <li><b>Lançar boletim:</b> lista de seções e formulário rápido, feito para digitar com o teclado.</li>
+          <li><b>Telão:</b> tela cheia, letras grandes, só leitura, para TV ou projetor.</li>
+          <li><b>Seções e candidatos:</b> cadastro inicial (importável por planilha). Entra na construção, sem mockup por ser só formulário.</li>
+        </ul></div>
+      <div class="card"><h2>Como construir</h2>
+        <ul>
+          <li>Aplicação web: abre no navegador do notebook e no celular, sem instalar.</li>
+          <li>Banco de dados com atualização em tempo real (Supabase ou Firebase, a decidir).</li>
+          <li>Login simples para quem lança. O telão e o dashboard abrem por link, só leitura.</li>
+          <li>Histórico de cada lançamento, para corrigir um boletim digitado errado e saber quem alterou.</li>
+        </ul></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Preciso que você responda depois de aprovar o layout</h2>
+      <ul class="q">
+        <li><b>Cargos:</b> quais vão ser acompanhados? Presidente, governador, senador, deputado federal e estadual? O mockup mostra um cargo por vez, com seletor no topo.</li>
+        <li><b>Candidatos e seções:</b> você tem a lista (planilha ou PDF)? O ideal é importar as seções de Aracati dos dados do TSE e os candidatos do DivulgaCand.</li>
+        <li><b>Mapa:</b> o mapa vai marcar o local de votação (escola, ginásio) onde ficam as seções, com pino agrupado por local. Precisa de coordenadas de cada local. O mapa do mockup é ilustrativo.</li>
+        <li><b>Quem lança:</b> só você, ou uma equipe em vários celulares ao mesmo tempo?</li>
+        <li><b>Foco:</b> você acompanha um candidato específico (destaque dele no telão) ou o município inteiro?</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section class="screen" id="s-dash" hidden>
+    <div class="app">
+      <div class="topbar">
+        <div class="brand">Apuração Aracati<small>ELEIÇÕES 2026 · 1º TURNO</small></div>
+        <div class="nav"><span class="on">Dashboard</span><span>Lançar boletim</span><span>Seções</span><span>Telão</span></div>
+        <select class="sel" aria-label="Cargo"><option>Governador</option></select>
+        <span class="live"><i class="dot"></i>atualizado 19:42:18</span>
+      </div>
+      <div class="body">
+        <div class="kpis">
+          <div class="kpi"><span>Seções apuradas</span><b>87 / 142</b><div class="bar"><i style="width:61%"></i></div></div>
+          <div class="kpi"><span>Eleitores aptos</span><b>58.204</b></div>
+          <div class="kpi"><span>Comparecimento</span><b>81,3%</b></div>
+          <div class="kpi"><span>Brancos + nulos</span><b>6,8%</b></div>
+          <div class="kpi"><span>Aguardando</span><b style="color:var(--warn)">55</b></div>
+        </div>
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><h3>Mapa das seções</h3>
+              <div class="legend"><span><i class="s-ok"></i>apurada</span><span><i class="s-part"></i>em lançamento</span><span><i class="s-wait"></i>aguardando</span></div></div>
+            <svg class="map" viewBox="0 0 640 400" id="map1" role="img" aria-label="Mapa ilustrativo com pinos de locais de votação"></svg>
+            <div class="muted" style="font-size:12px">Cada pino é um local de votação, com o número de seções dentro. Clique para ver as seções e o resultado do local. Mapa ilustrativo.</div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h3>Resultado do município</h3><span class="muted mono" style="font-size:12px">votos válidos</span></div>
+            <div class="rank" id="rank1"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h3>Seções</h3>
+            <div class="chips"><span class="chip on">Todas 142</span><span class="chip">Apuradas 87</span><span class="chip">Em lançamento 6</span><span class="chip">Aguardando 49</span><span class="chip">Zona 18</span><span class="chip">Buscar local…</span></div></div>
+          <div class="tw"><table>
+            <thead><tr><th>Seção</th><th>Local de votação</th><th class="r">Aptos</th><th class="r">Compar.</th><th class="r">Candidato 13</th><th class="r">Candidato 45</th><th class="r">Candidato 22</th><th>Status</th><th>Lançado</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">0012</td><td>E.E.F.M. Cel. Alexandrino</td><td class="r mono">312</td><td class="r mono">261</td><td class="r mono">118</td><td class="r mono">94</td><td class="r mono">31</td><td><span class="pill"><i class="s-ok"></i>Apurada</span></td><td class="mono">19:38</td></tr>
+              <tr><td class="mono">0013</td><td>E.E.F.M. Cel. Alexandrino</td><td class="r mono">298</td><td class="r mono">240</td><td class="r mono">101</td><td class="r mono">97</td><td class="r mono">28</td><td><span class="pill"><i class="s-ok"></i>Apurada</span></td><td class="mono">19:40</td></tr>
+              <tr><td class="mono">0027</td><td>Escola Municipal Centro</td><td class="r mono">305</td><td class="r mono">—</td><td class="r mono">—</td><td class="r mono">—</td><td class="r mono">—</td><td><span class="pill"><i class="s-wait"></i>Aguardando</span></td><td class="mono">—</td></tr>
+              <tr><td class="mono">0031</td><td>Ginásio Poliesportivo</td><td class="r mono">287</td><td class="r mono">231</td><td class="r mono">88</td><td class="r mono">—</td><td class="r mono">—</td><td><span class="pill"><i class="s-part"></i>Em lançamento</span></td><td class="mono">19:41</td></tr>
+            </tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LANÇAR BU -->
+  <section class="screen" id="s-bu" hidden>
+    <div class="app">
+      <div class="topbar">
+        <div class="brand">Apuração Aracati<small>ELEIÇÕES 2026 · 1º TURNO</small></div>
+        <div class="nav"><span>Dashboard</span><span class="on">Lançar boletim</span><span>Seções</span><span>Telão</span></div>
+        <span class="live"><i class="dot"></i>Maria · online</span>
+      </div>
+      <div class="body">
+        <div class="bu">
+          <div class="card">
+            <div class="card-h"><h3>Seções</h3><select class="sel" aria-label="Filtro"><option>Pendentes primeiro</option></select></div>
+            <div class="inp" style="text-align:left;font:400 14px var(--f-body);color:var(--muted)">Digite o número da seção…</div>
+            <div class="list">
+              <div class="li"><div><b>0027</b><small>Escola Municipal Centro</small></div><span class="pill"><i class="s-wait"></i>Aguardando</span></div>
+              <div class="li on"><div><b>0031</b><small>Ginásio Poliesportivo</small></div><span class="pill"><i class="s-part"></i>Em lançamento</span></div>
+              <div class="li"><div><b>0032</b><small>Ginásio Poliesportivo</small></div><span class="pill"><i class="s-wait"></i>Aguardando</span></div>
+              <div class="li"><div><b>0044</b><small>E.E.M. Padre Cícero</small></div><span class="pill"><i class="s-wait"></i>Aguardando</span></div>
+              <div class="li"><div><b>0012</b><small>E.E.F.M. Cel. Alexandrino</small></div><span class="pill"><i class="s-ok"></i>Apurada</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-h"><div><h3>Seção 0031 · Zona 18</h3><div class="muted">Ginásio Poliesportivo · Governador</div></div>
+              <select class="sel" aria-label="Cargo"><option>Governador</option></select></div>
+            <div class="fields">
+              <div class="fld"><label>Aptos</label><div class="inp">287</div></div>
+              <div class="fld"><label>Comparecimento</label><div class="inp">231</div></div>
+              <div class="fld"><label>Abstenções</label><div class="inp">56</div></div>
+            </div>
+            <div class="votes">
+              <div class="vrow"><div class="sw" style="background:var(--c1)">13</div><div><b>Candidato Exemplo A</b><div class="muted" style="font-size:12px">Partido X</div></div><div class="inp">88</div></div>
+              <div class="vrow"><div class="sw" style="background:var(--c2)">45</div><div><b>Candidato Exemplo B</b><div class="muted" style="font-size:12px">Partido Y</div></div><div class="inp">79</div></div>
+              <div class="vrow"><div class="sw" style="background:var(--c3)">22</div><div><b>Candidato Exemplo C</b><div class="muted" style="font-size:12px">Partido Z</div></div><div class="inp">41</div></div>
+              <div class="vrow"><div class="sw" style="background:var(--wait)">B</div><div><b>Votos em branco</b></div><div class="inp">9</div></div>
+              <div class="vrow"><div class="sw" style="background:var(--wait)">N</div><div><b>Votos nulos</b></div><div class="inp">14</div></div>
+            </div>
+            <div class="check"><span>Soma lançada <b class="mono">231</b> de <b class="mono">231</b> comparecimento</span><span class="ok">✓ Confere, pode salvar</span></div>
+            <div class="photo"><span>Foto do boletim (opcional, para conferência futura)</span><span class="btn">Anexar foto</span></div>
+            <div class="actions"><span class="btn">Salvar rascunho</span><span class="btn pri">Salvar e ir para próxima seção</span></div>
+            <div class="muted" style="font-size:12px">Tab avança de campo em campo. Enter salva. Se a soma não bater, o botão fica bloqueado e mostra a diferença.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TELÃO -->
+  <section class="screen" id="s-tv" hidden>
+    <div class="tv">
+      <div class="tv-h">
+        <div><div class="mono" style="letter-spacing:.1em">ARACATI · GOVERNADOR · 1º TURNO</div><h2>Apuração em tempo real</h2></div>
+        <div class="mono">atualizado 19:42:18</div>
+      </div>
+      <div class="tv-main">
+        <div class="tv-c" id="tvrank"></div>
+        <div class="tv-side">
+          <div class="tv-big"><b>61,3%</b><span>das seções apuradas · 87 de 142</span></div>
+          <div class="tv-map"><svg viewBox="0 0 640 400" id="map2"></svg></div>
+        </div>
+      </div>
+      <div class="tv-foot"><span>Últimas: <b>Seção 0031</b> Ginásio</span><span><b>Seção 0013</b> E.E.F.M. Alexandrino</span><span><b>Seção 0012</b> E.E.F.M. Alexandrino</span><span><b>Seção 0044</b> Padre Cícero</span></div>
+    </div>
+    <p class="note" style="margin-top:12px">Proporção 16:9, abre em tela cheia por link próprio (F11). Atualiza sozinho. Se houver um candidato foco, ele ganha destaque de cor e a diferença para o segundo.</p>
+  </section>
+</div>
+
+<script>
+const cands=[{n:13,name:'Candidato Exemplo A',v:18420,c:'--c1'},{n:45,name:'Candidato Exemplo B',v:15960,c:'--c2'},{n:22,name:'Candidato Exemplo C',v:7310,c:'--c3'},{n:30,name:'Candidato Exemplo D',v:2140,c:'--c4'}];
+const tot=cands.reduce((a,b)=>a+b.v,0);
+const fmt=n=>n.toLocaleString('pt-BR');
+const pc=v=>(v/tot*100).toFixed(1).replace('.',',')+'%';
+document.getElementById('rank1').innerHTML=cands.map(c=>`<div class="cand"><span class="n">${c.n}</span><span class="name">${c.name}</span><span class="v">${pc(c.v)}</span><div class="track"><i style="width:${c.v/cands[0].v*100}%;background:var(${c.c})"></i></div><span class="muted mono" style="grid-column:1/-1;font-size:12px">${fmt(c.v)} votos</span></div>`).join('');
+document.getElementById('tvrank').innerHTML=cands.map(c=>`<div class="tv-row"><span class="num">${c.n}</span><span class="nm">${c.name}</span><span class="pc">${pc(c.v)}</span><div class="tr"><i style="width:${c.v/cands[0].v*100}%;background:var(${c.c})"></i></div><small>${fmt(c.v)} votos</small></div>`).join('');
+// mapa ilustrativo
+let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+const shape='M90 170 C70 100 150 50 240 60 C330 30 430 40 500 90 C580 120 600 200 560 270 C520 340 420 370 330 350 C250 370 150 340 110 280 C95 250 95 200 90 170Z';
+const places=[...Array(22)].map(()=>({x:150+rnd()*340,y:90+rnd()*230,n:2+Math.floor(rnd()*7),s:rnd()}));
+function draw(id,dark){
+  const st=s=>s<.6?'var(--ok)':s<.75?'var(--warn)':'var(--wait)';
+  const st2=s=>s<.6?'#4cc27d':s<.75?'#e8a23a':'#6c7b76';
+  document.getElementById(id).innerHTML=`<path d="${shape}" fill="${dark?'#16261f':'var(--map-line)'}" fill-opacity="${dark?1:.5}" stroke="${dark?'#2c3d37':'var(--map-line)'}" stroke-width="2"/>`+
+  places.map(p=>`<g><circle cx="${p.x}" cy="${p.y}" r="${9+p.n*1.5}" fill="${dark?st2(p.s):st(p.s)}" stroke="${dark?'#08100e':'var(--surface)'}" stroke-width="2"/><text x="${p.x}" y="${p.y+4}" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">${p.n}</text></g>`).join('')+
+  `<text x="40" y="385" font-size="11" fill="${dark?'#8aa19a':'var(--muted)'}">Mapa ilustrativo · posições reais virão das coordenadas dos locais</text>`;
+}
+draw('map1',false);draw('map2',true);
+// abas
+const tabs=[...document.querySelectorAll('.tab')];
+function show(t){tabs.forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));['plano','dash','bu','tv'].forEach(k=>document.getElementById('s-'+k).hidden=k!==t);try{localStorage.setItem('tab',t)}catch(e){}}
+tabs.forEach(b=>b.onclick=()=>show(b.dataset.t));
+try{const t=localStorage.getItem('tab');if(t)show(t)}catch(e){}
+</script>

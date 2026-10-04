@@ -1,0 +1,80 @@
+<!doctype html><html lang="pt-BR"><head><title>Apuração Aracati 2026</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script><style>.rankbox{display:flex;flex-direction:column;gap:20px;max-height:640px;overflow:auto}.grp{display:flex;flex-direction:column;gap:12px}.grp+.grp{border-top:1px solid var(--line);padding-top:16px}.grp-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}</style></head>
+<body>
+<header class="topbar"><select class="sel" id="cargo" aria-label="Cargo"></select><span class="live" id="live"></span></header>
+<main>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-h"><h3>Mapa dos locais de votação</h3>
+        <div class="legend"><span><i class="s-ok"></i>apurado</span><span><i class="s-part"></i>em andamento</span><span><i class="s-wait"></i>aguardando</span></div></div>
+      <div id="map"></div>
+      <div class="muted" style="font-size:12px">O mapa mostra só os locais que já têm votos lançados. O número no pino é a quantidade de seções do local. Clique para filtrar a tabela por ele.</div>
+    </div>
+    <div class="card"><div class="card-h"><h3>Resultado do município</h3><span class="muted mono" style="font-size:12px" id="modo"></span></div><div id="rank" class="rankbox"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h3>Seções</h3>
+      <div class="chips" id="chips"></div></div>
+    <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  </div>
+</main>
+<script type="module">
+import * as A from '/app.js';
+let filtro='todas', busca='', localSel=null, mapa;
+const $=id=>document.getElementById(id);
+function render(){
+  const cargo=A.cargoAtual(), res=A.resultado(cargo), cands=A.candidatosDe(cargo);
+  const comp=res.aptosApuradas?A.pct(res.comp,res.aptosApuradas):'—';
+  const blno=res.comp?A.pct(res.brancos+res.nulos,res.comp):'—';
+  $('kpis').innerHTML=`
+   <div class="kpi"><span>Seções apuradas</span><b>${res.apuradas} / ${res.secoesTotal}</b><div class="bar"><i style="width:${res.secoesTotal?res.apuradas/res.secoesTotal*100:0}%"></i></div></div>
+   <div class="kpi"><span>Eleitores aptos</span><b>${A.fmt(res.aptosTotal)}</b></div>
+   <div class="kpi"><span>Comparecimento</span><b>${comp}</b></div>
+   <div class="kpi"><span>Brancos + nulos</span><b>${blno}</b></div>
+   <div class="kpi"><span>Em lançamento</span><b style="color:var(--warn)">${res.rascunho}</b></div>
+   <div class="kpi"><span>Aguardando</span><b>${res.secoesTotal-res.apuradas-res.rascunho}</b></div>`;
+  // Favoritos de todos os cargos de uma vez; sem nenhum favorito, os 10 primeiros do cargo selecionado.
+  const grupos=A.D.cargos.map(c=>({c,r:A.resultado(c.id)})).filter(g=>g.r.modo==='favoritos');
+  if(grupos.length){
+    const n=grupos.reduce((t,g)=>t+g.r.exibidos.length,0);
+    $('modo').textContent=`${n} favorito${n>1?'s':''}`;
+    $('rank').innerHTML=grupos.map(g=>`<div class="grp"><div class="grp-h"><h3>${A.esc(g.c.nome)}</h3><span class="muted mono" style="font-size:12px">${g.r.apuradas}/${g.r.secoesTotal} seções</span></div><div class="rank">${A.rankingHtml(g.r)}</div></div>`).join('');
+  }else{
+    $('modo').textContent='10 primeiros';
+    $('rank').innerHTML=A.rankingHtml(res)
+      +'<div class="muted" style="font-size:12px">Marque favoritos na aba Candidatos para acompanhar vários cargos aqui.</div>';
+  }
+  A.desenharLocais(mapa,cargo,l=>{localSel=localSel===l.id?null:l.id;render();});
+  const cont={todas:A.D.secoes.length,apurada:0,rascunho:0,aguardando:0};
+  A.D.secoes.forEach(s=>cont[A.statusSecao(s.id,cargo)]++);
+  $('chips').innerHTML=[['todas','Todas'],['apurada','Apuradas'],['rascunho','Em lançamento'],['aguardando','Aguardando']].map(([k,t])=>`<button class="chip ${filtro===k?'on':''}" data-f="${k}">${t} ${cont[k]}</button>`).join('')
+   +`<input class="inp" id="busca" placeholder="Buscar seção ou local…" value="${A.esc(busca)}" style="width:190px">`
+   +(localSel?`<button class="chip on" data-f="limpar">Local: ${A.esc(A.localPorId(localSel)?.nome)} ✕</button>`:'');
+  $('thead').innerHTML='<tr><th>Seção</th><th>Local de votação</th><th class="r">Aptos</th><th class="r">Compar.</th>'+cands.map(c=>`<th class="r">${A.esc(c.numero)}</th>`).join('')+'<th>Status</th><th>Atualizado</th></tr>';
+  const b=busca.toLowerCase();
+  const rows=A.D.secoes.filter(s=>{
+    const st=A.statusSecao(s.id,cargo), l=A.localPorId(s.local_id);
+    return (filtro==='todas'||st===filtro)&&(!localSel||s.local_id===localSel)&&(!b||String(s.numero).includes(b)||(l?.nome||'').toLowerCase().includes(b));
+  });
+  $('tbody').innerHTML=rows.map(s=>{
+    const bo=A.boletim(s.id,cargo), st=bo?.status||'aguardando', l=A.localPorId(s.local_id);
+    const v=bo&&st==='apurada';
+    return `<tr class="click" data-s="${s.id}"><td class="mono">${s.zona}/${String(s.numero).padStart(4,'0')}</td><td>${A.esc(l?.nome)}</td><td class="r mono">${A.fmt(s.aptos)}</td><td class="r mono">${bo?A.fmt(bo.comparecimento):'—'}</td>${cands.map(c=>`<td class="r mono">${bo?A.fmt(bo.votos[c.id]||0):'—'}</td>`).join('')}<td><span class="pill"><i class="${A.CLASSE[st]}"></i>${A.ROTULO[st]}</span></td><td class="mono">${bo?new Date(bo.updated_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—'}</td></tr>`;
+  }).join('')||`<tr><td colspan="${6+cands.length}" class="empty">Nenhuma seção neste filtro.</td></tr>`;
+}
+document.addEventListener('click',e=>{
+  const f=e.target.closest('[data-f]'); if(f){ if(f.dataset.f==='limpar') localSel=null; else filtro=f.dataset.f; render(); }
+  const tr=e.target.closest('tr[data-s]'); if(tr) location.href=`/lancar?secao=${tr.dataset.s}&cargo=${A.cargoAtual()}`;
+});
+document.addEventListener('input',e=>{ if(e.target.id==='busca'){ busca=e.target.value; const p=e.target.selectionStart; render(); const n=$('busca'); n.focus(); n.setSelectionRange(p,p);} });
+await A.iniciar();
+A.menu('/');
+mapa=A.criarMapa($('map'));
+A.seletorCargo($('cargo'),c=>{mapa&&(mapa._ajustado=false);render();});
+A.aoMudar(render); render();
+</script></body></html>

@@ -1,0 +1,12 @@
+{
+  "name": "votos26",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Acompanhamento da apuração de votos - Aracati/CE 2026",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "dev": "node --no-warnings --watch server.js"
+  }
+}
