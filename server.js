@@ -517,6 +517,13 @@ http.createServer(async (req, res) => {
       for (const v of db.prepare(`SELECT * FROM votos WHERE secao_id IN (${lista})`).all()) (vm[`${v.secao_id}|${v.cargo_id}`] ||= {})[v.candidato_id] = v.votos;
       return json(res, 200, { boletins: db.prepare(`SELECT * FROM boletins WHERE secao_id IN (${lista})`).all().map(b => ({ ...b, votos: vm[`${b.secao_id}|${b.cargo_id}`] || {} })) });
     }
+    if (url.pathname === '/api/candidato-votos') { // votos de um candidato em cada seção apurada (m = cidade ou 'todas')
+      const id = Number(url.searchParams.get('id')), m = url.searchParams.get('m');
+      const cidade = /^\d+$/.test(m || '') ? ` AND s.municipio_id=${Number(m)}` : '';
+      const votos = {};
+      for (const r of db.prepare(`SELECT v.secao_id, v.votos FROM votos v JOIN boletins b ON b.secao_id=v.secao_id AND b.cargo_id=v.cargo_id AND b.status='apurada' JOIN secoes s ON s.id=v.secao_id WHERE v.candidato_id=? AND v.votos>0${cidade}`).all(id)) votos[r.secao_id] = r.votos;
+      return json(res, 200, { votos });
+    }
     if (url.pathname === '/api/urnas/status') return json(res, 200, urnas);
     if (url.pathname === '/api/stream') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });

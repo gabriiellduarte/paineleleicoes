@@ -53,6 +53,23 @@ import * as A from '/app.js';
 const $ = id => document.getElementById(id);
 // Seções clicadas vão sendo somadas; sem nenhuma, o painel mostra o resumo do cargo na cidade toda.
 let mapa, localSel = null, busca = '', verTodos = false, focoId = null; // focoId: candidato escolhido
+let votosFoco = null; // Map seção → votos do candidato escolhido (só seções com voto)
+// Busca no servidor onde o candidato teve voto (o dashboard só carrega os votos dos candidatos exibidos).
+async function carregarFoco(reenquadrar = false) {
+  const id = focoId; if (!id) { votosFoco = null; return; }
+  try {
+    const j = await (await fetch(`/api/candidato-votos?id=${id}&m=${encodeURIComponent(A.D.municipioId)}`, { cache: 'no-store' })).json();
+    if (id === focoId) votosFoco = new Map(Object.entries(j.votos).map(([k, v]) => [Number(k), v]));
+  } catch { if (id === focoId) votosFoco = new Map(); }
+  if (mapa && reenquadrar) mapa._ajustado = false; // só ao escolher: enquadra no que ele tem (as atualizações ao vivo não mexem no zoom)
+  render();
+}
+const votosPorLocal = () => {
+  if (!focoId) return null;
+  const m = new Map();
+  for (const [sid, v] of votosFoco || []) { const s = A.secaoPorId(sid); if (s) m.set(s.local_id, (m.get(s.local_id) || 0) + v); }
+  return m;
+};
 const sel = new Set();
 const pad = n => String(n).padStart(4, '0');
 const secoesDe = lid => A.D.secoes.filter(s => s.local_id === lid).sort((a, b) => a.zona - b.zona || a.numero - b.numero);
@@ -137,7 +154,7 @@ function render() {
     // local com uma seção só: o clique no pino já soma a seção (de novo, tira), sem precisar escolhê-la
     if (ss.length === 1) sel.has(ss[0].id) ? sel.delete(ss[0].id) : sel.add(ss[0].id);
     render();
-  }, locaisMarcados);
+  }, locaisMarcados, votosPorLocal());
 
   const abas = `<div class="chips">${A.D.cargos.map(c => `<button class="chip ${c.id === cargoId ? 'on' : ''}" data-cargo="${c.id}">${A.esc(c.nome)}</button>`).join('')}</div>`;
 
@@ -159,7 +176,7 @@ function render() {
 }
 
 document.addEventListener('click', e => {
-  const c = e.target.closest('[data-cargo]'); if (c) { try { localStorage.setItem('cargo', c.dataset.cargo); } catch {} verTodos = false; focoId = null; $('cand').value = ''; render(); return; }
+  const c = e.target.closest('[data-cargo]'); if (c) { try { localStorage.setItem('cargo', c.dataset.cargo); } catch {} verTodos = false; focoId = null; votosFoco = null; $('cand').value = ''; if (mapa) mapa._ajustado = false; render(); return; }
   const s = e.target.closest('[data-sec]'); if (s) { const id = Number(s.dataset.sec); sel.has(id) ? sel.delete(id) : sel.add(id); render(); return; }
   if (e.target.closest('[data-todas-local]')) { secoesDe(localSel).forEach(x => sel.add(x.id)); render(); return; }
   if (e.target.closest('[data-limpar]')) { sel.clear(); render(); return; }
@@ -174,9 +191,9 @@ function montarCandidatos() {
 }
 $('cand').addEventListener('input', e => {
   const id = rotulos.get(e.target.value);
-  if (id != null) { focoId = id; verTodos = false; render(); } // escolheu da lista
+  if (id != null) { focoId = id; votosFoco = null; verTodos = false; render(); carregarFoco(true); } // escolheu da lista
 });
-$('cand-x').onclick = () => { focoId = null; $('cand').value = ''; render(); };
+$('cand-x').onclick = () => { focoId = null; votosFoco = null; $('cand').value = ''; if (mapa) mapa._ajustado = false; render(); };
 document.addEventListener('input', e => {
   if (e.target.id !== 'busca') return;
   busca = e.target.value.trim();
@@ -193,6 +210,6 @@ A.menu('/urnas');
 mapa = A.criarMapa($('map'));
 const q = Number(new URLSearchParams(location.search).get('secao'));
 if (q && A.secaoPorId(q)) { localSel = A.secaoPorId(q).local_id; sel.add(q); }
-A.aoMudar(() => { montarCandidatos(); render(); }); montarCandidatos(); render();
+A.aoMudar(() => { montarCandidatos(); render(); if (focoId) carregarFoco(); }); montarCandidatos(); render();
 setTimeout(() => mapa?.invalidateSize(), 300);
 </script></body></html>

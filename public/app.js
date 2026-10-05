@@ -213,7 +213,8 @@ export function criarMapa(el, escuro = false) {
   m._camada = L.layerGroup().addTo(m);
   return m;
 }
-export function desenharLocais(m, cargoId, aoClicar, selecionados = null) {
+// votosPorLocal (Map local→votos, opcional): mostra só os locais com voto desse candidato, com os votos no pino
+export function desenharLocais(m, cargoId, aoClicar, selecionados = null, votosPorLocal = null) {
   if (!m) return;
   m._camada.clearLayers();
   if (m._mun !== D.municipioId) { m._mun = D.municipioId; m._ajustado = false; } // trocou de cidade: reenquadra
@@ -222,19 +223,21 @@ export function desenharLocais(m, cargoId, aoClicar, selecionados = null) {
     if (l.lat == null || l.lng == null) continue;
     const st = statusLocal(l.id, cargoId);
     if (st.status === 'aguardando') continue; // só aparecem locais com votos já lançados
-    const r = 12 + Math.min(st.total, 8) * 1.6;
+    const vl = votosPorLocal ? votosPorLocal.get(l.id) || 0 : null;
+    if (votosPorLocal && !vl) continue;
+    const r = votosPorLocal ? 12 + Math.min(Math.sqrt(vl), 14) * 1.2 : 12 + Math.min(st.total, 8) * 1.6;
     const marcado = selecionados?.has(l.id); // locais somados no dashboard: contorno azul grosso
     const mk = L.circleMarker([l.lat, l.lng], { radius: r + (marcado ? 3 : 0), color: marcado ? '#1560d4' : '#fff', weight: marcado ? 5 : 2, fillColor: COR_STATUS[st.status], fillOpacity: .95 }).addTo(m._camada);
     if (marcado) mk.bringToFront();
-    mk.bindTooltip(String(st.total), { permanent: true, direction: 'center', className: 'pino' });
-    mk.bindPopup(`<b>${esc(l.nome)}</b><br>${st.apuradas}/${st.total} seções apuradas`);
+    mk.bindTooltip(votosPorLocal ? fmt(vl) : String(st.total), { permanent: true, direction: 'center', className: 'pino' });
+    mk.bindPopup(`<b>${esc(l.nome)}</b><br>${votosPorLocal ? `${fmt(vl)} votos · ` : ''}${st.apuradas}/${st.total} seções apuradas`);
     if (aoClicar) mk.on('click', () => aoClicar(l));
     pts.push([l.lat, l.lng]);
   }
   if (m._aviso) { m._aviso.remove(); m._aviso = null; }
   if (!pts.length) {
     m._aviso = L.control({ position: 'topright' });
-    m._aviso.onAdd = () => { const d = L.DomUtil.create('div'); d.textContent = 'Nenhum local com votos lançados neste cargo ainda.'; d.style.cssText = 'background:rgba(20,32,29,.85);color:#fff;padding:6px 10px;border-radius:6px;font:12px sans-serif'; return d; };
+    m._aviso.onAdd = () => { const d = L.DomUtil.create('div'); d.textContent = votosPorLocal ? 'Nenhum local com votos deste candidato.' : 'Nenhum local com votos lançados neste cargo ainda.'; d.style.cssText = 'background:rgba(20,32,29,.85);color:#fff;padding:6px 10px;border-radius:6px;font:12px sans-serif'; return d; };
     m._aviso.addTo(m);
   }
   if (pts.length && !m._ajustado) { m.fitBounds(pts, { padding: [30, 30], maxZoom: 14 }); m._ajustado = true; }
