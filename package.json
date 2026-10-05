@@ -4,9 +4,12 @@
   "private": true,
   "description": "Acompanhamento da apuração de votos - Aracati/CE 2026",
   "type": "module",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
-    "start": "node --no-warnings server.js",
-    "dev": "node --no-warnings --watch server.js"
+    "build": "echo Nada para compilar",
+    "start": "node --no-warnings --experimental-sqlite server.js",
+    "dev": "node --no-warnings --experimental-sqlite --watch server.js"
   }
 }

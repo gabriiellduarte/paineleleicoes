@@ -150,11 +150,31 @@ const coord = (v, min, max) => {
   return Number.isFinite(n) && n >= min && n <= max && n !== 0 ? n : null;
 };
 
-export async function buscarSecoes(uf, municipio, pasta, log = () => {}) {
+// Linhas do arquivo de locais de votação da UF (cache em memória: o CSV do estado inteiro é pesado de ler).
+const cacheLocais = new Map();
+async function linhasDaUf(uf, pasta, log = () => {}) {
+  const c = cacheLocais.get(uf);
+  if (c && Date.now() - c.t < 30 * MIN) return c.linhas;
   log('Baixando seções e locais de votação do TSE (arquivo grande, pode levar um minuto)…');
   const zip = lerZip(await baixarZip(ZIP_LOCAIS, 'eleitorado_local_votacao_2026.zip', 12 * 60 * MIN, pasta));
+  const linhas = arquivoDaUf(zip, 'eleitorado', uf);
+  cacheLocais.set(uf, { t: Date.now(), linhas });
+  return linhas;
+}
+
+// Nomes dos municípios da UF, como o TSE escreve (é o que a importação procura).
+export async function listarMunicipios(uf, pasta) {
+  const nomes = new Set((await linhasDaUf(uf, pasta)).map((l) => l.NM_MUNICIPIO));
+  return [...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+export async function buscarSecoes(uf, municipio, pasta, log = () => {}) {
+  return secoesDoMunicipio(await linhasDaUf(uf, pasta, log), uf, municipio);
+}
+
+export function secoesDoMunicipio(todas, uf, municipio) {
   const alvo = semAcento(municipio);
-  const linhas = arquivoDaUf(zip, 'eleitorado', uf).filter((l) => semAcento(l.NM_MUNICIPIO) === alvo);
+  const linhas = todas.filter((l) => semAcento(l.NM_MUNICIPIO) === alvo);
   if (!linhas.length) throw new Error(`Município "${municipio}" não encontrado em ${uf} no arquivo do TSE.`);
   const principais = linhas.filter((l) => l.CD_TIPO_SECAO_AGREGADA === '1' || l.DS_TIPO_SECAO_AGREGADA === 'Principal');
   // Seção agregada vota na urna da principal: os eleitores somam e ela aparece junto no boletim.

@@ -15,7 +15,16 @@ td.acts{display:flex;gap:6px;justify-content:flex-end}
 fieldset{border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:10px;margin:0;min-width:0}
 legend{font:600 12px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:0 6px}
 .linkbox{display:flex;gap:8px}.linkbox input{flex:1;min-width:0;font:12px var(--f-mono)}
-</style></head>
+</style><!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5KPR9F449"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-Q5KPR9F449');
+</script>
+</head>
 <body>
 <header class="topbar"><span class="live" id="live"></span></header>
 <main>
@@ -70,6 +79,8 @@ import * as A from '/app.js';
 const $ = id => document.getElementById(id);
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const pad = n => String(n).padStart(4, '0');
+// cidade onde um local/seção novo nasce: a selecionada no topo (não vale "todas" com várias cidades)
+const cidadeNova = () => { if (A.D.municipioId === 'todas') { if (A.D.municipios.length === 1) return A.D.municipios[0].id; throw new Error('Escolha uma cidade no topo da página antes de criar.'); } return Number(A.D.municipioId); };
 const virg = v => (v != null ? String(v).replace('.', ',') : '');
 let vista = 'secoes', busca = '', fLocal = '', edit = null, editL = null, confirmDel = false, linkLocal = null;
 
@@ -90,15 +101,16 @@ function render() {
     });
     $('resumo').textContent = `${lista.length} de ${A.D.secoes.length} seções · ${A.D.locais.length} locais`;
     $('thead').innerHTML = '<tr><th>Zona/Seção</th><th>Local de votação</th><th>Endereço</th><th class="r">Aptos</th><th>Agregadas</th><th title="Um ponto por cargo">Apuração</th><th></th></tr>';
-    $('tbody').innerHTML = lista.map(s => {
+    $('tbody').innerHTML = lista.slice(0, 300).map(s => {
       const l = A.localPorId(s.local_id);
-      return `<tr><td class="mono">${s.zona}/${pad(s.numero)}</td><td>${A.esc(l?.nome)}</td><td class="muted">${A.esc(l?.endereco)}</td><td class="r mono">${A.fmt(s.aptos)}</td><td class="mono">${A.esc(s.agregadas || '—')}</td><td>${dots(s.id)}</td><td class="acts"><a class="btn" href="/lancar?secao=${s.id}" style="text-decoration:none">Lançar</a><button class="btn" data-es="${s.id}">Editar</button></td></tr>`;
+      return `<tr><td class="mono">${A.rotuloSecao(s)}</td><td>${A.esc(l?.nome)}</td><td class="muted">${A.esc(l?.endereco)}</td><td class="r mono">${A.fmt(s.aptos)}</td><td class="mono">${A.esc(s.agregadas || '—')}</td><td>${dots(s.id)}</td><td class="acts"><a class="btn" href="/lancar?secao=${s.id}" style="text-decoration:none">Lançar</a><button class="btn" data-es="${s.id}">Editar</button></td></tr>`;
     }).join('') || '<tr><td colspan="7" class="empty">Nenhuma seção encontrada.</td></tr>';
+    if (lista.length > 300) $('tbody').insertAdjacentHTML('beforeend', `<tr><td colspan="7" class="empty">Mostrando 300 de ${lista.length}. Busque ou escolha uma cidade no topo.</td></tr>`);
   } else {
     const lista = A.D.locais.filter(l => !b || norm(l.nome).includes(b) || norm(l.endereco).includes(b));
     $('resumo').textContent = `${lista.length} de ${A.D.locais.length} locais · ${A.D.locais.filter(l => l.lat == null).length} sem coordenadas`;
     $('thead').innerHTML = '<tr><th>Local de votação</th><th>Endereço</th><th class="r">Seções</th><th class="r">Aptos</th><th>Coordenadas</th><th></th></tr>';
-    $('tbody').innerHTML = lista.map(l => {
+    $('tbody').innerHTML = lista.slice(0, 300).map(l => {
       const ss = A.D.secoes.filter(s => s.local_id === l.id);
       return `<tr><td>${A.esc(l.nome)}</td><td class="muted">${A.esc(l.endereco)}</td><td class="r mono">${ss.length}</td><td class="r mono">${A.fmt(ss.reduce((t, s) => t + s.aptos, 0))}</td><td class="mono">${l.lat != null ? l.lat.toFixed(5) + ', ' + l.lng.toFixed(5) : '<span style="color:var(--warn)">sem coordenadas</span>'}</td><td class="acts"><button class="btn" data-ln="${l.id}">Link do chefe</button><button class="btn" data-el="${l.id}">Editar</button></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="empty">Nenhum local encontrado.</td></tr>';
@@ -186,7 +198,7 @@ $('f').onsubmit = async e => {
   try {
     let localId = $('e-local').value;
     const d = { nome: $('l-nome').value, endereco: $('l-end').value, lat: $('e-lat').value, lng: $('e-lng').value };
-    if (localId === 'novo') localId = (await A.enviar('POST', '/api/local', d)).id;
+    if (localId === 'novo') localId = (await A.enviar('POST', '/api/local', { ...d, municipio_id: cidadeNova() })).id;
     else {
       const l = A.localPorId(Number(localId));
       if (l.nome !== d.nome.trim() || (l.endereco || '') !== d.endereco || virg(l.lat) !== d.lat.trim() || virg(l.lng) !== d.lng.trim()) await A.enviar('POST', '/api/local', { id: l.id, ...d });
@@ -199,7 +211,7 @@ $('f-local').onsubmit = async e => {
   e.preventDefault();
   await A.pedirLogin();
   try {
-    await A.enviar('POST', '/api/local', { id: editL?.id, nome: $('lo-nome').value, endereco: $('lo-end').value, lat: $('lo-lat').value, lng: $('lo-lng').value });
+    await A.enviar('POST', '/api/local', { id: editL?.id, municipio_id: cidadeNova(), nome: $('lo-nome').value, endereco: $('lo-end').value, lat: $('lo-lat').value, lng: $('lo-lng').value });
     $('dl-local').close(); A.toast('Salvo.'); await A.carregar();
   } catch (er) { $('er-local').textContent = er.message; }
 };

@@ -1,25 +1,42 @@
 <!doctype html><html lang="pt-BR"><head><title>Cadastro · Apuração Aracati</title>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/app.css"></head>
+<link rel="stylesheet" href="/app.css"><!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5KPR9F449"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-Q5KPR9F449');
+</script>
+</head>
 <body>
 <header class="topbar"><span class="live" id="live"></span></header>
 <main>
   <div id="demo"></div>
   <div class="card">
     <h2>Importar do TSE</h2>
-    <p class="muted">Busca direto no TSE os candidatos dos cinco cargos (presidente, governador, senador, deputado federal e estadual) e todas as seções, locais de votação, endereços, coordenadas e eleitores aptos do município. Dados de exemplo são apagados na primeira importação. Seções agregadas entram junto da seção principal, que é a que tem boletim próprio.</p>
-    <div class="fields" style="grid-template-columns:100px minmax(0,260px)">
-      <div class="fld"><label for="uf">UF</label><input class="num" style="text-align:left" id="uf" value="CE" maxlength="2"></div>
-      <div class="fld"><label for="mun">Município</label><input class="num" style="text-align:left" id="mun" value="Aracati"></div>
+    <p class="muted">Busca direto no TSE os candidatos dos cinco cargos (presidente, governador, senador, deputado federal e estadual) e todas as seções, locais de votação, endereços, coordenadas e eleitores aptos do município. Cada importação <b>adiciona uma cidade</b>: para ter várias, importe uma de cada vez (as já cadastradas são mantidas; reimportar a mesma só atualiza). Dados de exemplo são apagados na primeira importação. Seções agregadas entram junto da seção principal, que é a que tem boletim próprio.</p>
+    <div class="fields" style="grid-template-columns:100px minmax(0,300px)">
+      <div class="fld"><label for="uf">UF</label><select class="sel" id="uf"><option>AC</option><option>AL</option><option>AM</option><option>AP</option><option>BA</option><option selected>CE</option><option>DF</option><option>ES</option><option>GO</option><option>MA</option><option>MG</option><option>MS</option><option>MT</option><option>PA</option><option>PB</option><option>PE</option><option>PI</option><option>PR</option><option>RJ</option><option>RN</option><option>RO</option><option>RR</option><option>RS</option><option>SC</option><option>SE</option><option>SP</option><option>TO</option></select></div>
+      <div class="fld"><label for="mun">Município</label><select class="sel" id="mun" disabled><option>Carregando a lista do TSE…</option></select></div>
     </div>
-    <div class="actions" style="justify-content:flex-start"><button class="btn pri" id="tse">Importar do TSE</button></div>
+    <div class="actions" style="justify-content:flex-start"><button class="btn pri" id="tse">Importar esta cidade</button><button class="btn" id="tse-todas">Importar todas as cidades da UF</button></div>
     <div id="tse-res" class="muted" aria-live="polite"></div>
+  </div>
+  <div class="card">
+    <h2>Cidades cadastradas</h2>
+    <div class="tw"><table><thead><tr><th>Cidade</th><th class="r">Seções</th><th class="r">Boletins</th><th></th></tr></thead><tbody id="cidades"></tbody></table></div>
+    <p class="muted">A cidade que aparece no topo de cada página filtra todas as telas. “Importar urnas” baixa os boletins oficiais do TSE e lança os votos de todos os cargos, com brancos, nulos e legenda; pode rodar de novo a qualquer momento (boletins da mesma seção são substituídos pelo oficial, e o histórico guarda o anterior).</p>
+    <div class="actions" style="justify-content:flex-start"><button class="btn pri" id="urnas-todas">Importar urnas de todas as cidades</button></div>
+    <div id="urnas-res" class="muted" aria-live="polite"></div>
   </div>
   <h3 class="muted" style="margin-top:4px">Ou importe por planilha</h3>
   <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
     <div class="card">
       <h2>Importar seções</h2>
+      <p class="muted"><b>Vão para a cidade selecionada no topo da página.</b></p>
       <p class="muted">Uma linha por seção, com cabeçalho. Separador ponto e vírgula, vírgula ou tab. Colunas: <span class="mono">zona;secao;local;endereco;lat;lng;aptos</span>. Reimportar atualiza sem duplicar. Lat/lng podem ficar em branco; o local só aparece no mapa quando tiver coordenadas.</p>
       <textarea class="ta" id="csv-secoes" placeholder="zona;secao;local;endereco;lat;lng;aptos&#10;18;1;E.E.F.M. Cel. Alexandrino;Rua X, 100;-4.5612;-37.7701;312"></textarea>
       <div class="actions"><input type="file" id="f-secoes" accept=".csv,.txt"><button class="btn pri" data-imp="secoes">Importar seções</button></div>
@@ -56,24 +73,76 @@ function render() {
   if (!$('base').dataset.ok) { $('base').value = A.D.config.base_url || ''; $('base').dataset.ok = '1'; }
   $('ids').textContent = A.D.cargos.map(c => c.id).join(', ');
   $('resumo').innerHTML = A.D.cargos.map(c => `<tr><td>${A.esc(c.nome)}</td><td class="r mono">${A.candidatosDe(c.id).length}</td><td class="r mono">${A.D.boletins.filter(b => b.cargo_id === c.id && b.status === 'apurada').length}</td></tr>`).join('');
-  $('totais').textContent = `${A.D.secoes.length} seções em ${A.D.locais.length} locais de votação · ${A.D.locais.filter(l => l.lat != null).length} locais com coordenadas no mapa.`;
+  $('cidades').innerHTML = A.D.municipios.map(m => {
+    return `<tr><td>${A.esc(m.nome)} <span class="muted mono">${A.esc(m.uf)}</span></td><td class="r mono">${m.secoes_n}</td><td class="r mono">${m.boletins_n}</td><td class="acts"><button class="btn" data-urnas="${m.id}">Importar urnas</button><button class="btn bad" data-delmun="${m.id}">Excluir</button></td></tr>`;
+  }).join('') || '<tr><td colspan="4" class="empty">Nenhuma cidade ainda. Importe do TSE acima.</td></tr>';
+  $('totais').textContent = `${A.D.rotulo}: ` + `${A.D.secoes.length} seções em ${A.D.locais.length} locais de votação · ${A.D.locais.filter(l => l.lat != null).length} locais com coordenadas no mapa.`;
 }
 document.addEventListener('change', e => {
   if (!e.target.matches('input[type=file]')) return;
   const alvo = e.target.id === 'f-secoes' ? 'csv-secoes' : 'csv-cands';
   const f = e.target.files[0]; if (f) f.text().then(t => $(alvo).value = t);
 });
+// lista de municípios do TSE para a UF escolhida (✓ = já cadastrada)
+let listaUf = null;
+async function carregarMunicipios() {
+  const uf = $('uf').value, sel = $('mun'); sel.disabled = true; sel.innerHTML = '<option>Carregando a lista do TSE…</option>';
+  try {
+    const r = await fetch('/api/tse/municipios?uf=' + uf); const j = await r.json();
+    if (!r.ok) throw new Error(j.erro || 'Falha ao listar.');
+    listaUf = j.municipios; marcarCadastradas();
+  } catch (er) { sel.innerHTML = `<option>${A.esc(er.message)}</option>`; }
+}
+function marcarCadastradas() {
+  if (!listaUf) return;
+  const sel = $('mun'), atual = sel.value || 'ARACATI';
+  const tem = new Set(A.D.municipios.map(m => A.semAcento(m.nome)));
+  sel.innerHTML = listaUf.map(n => `<option value="${A.esc(n)}">${tem.has(A.semAcento(n)) ? '✓ ' : ''}${A.esc(n)}</option>`).join('');
+  sel.value = [...sel.options].some(o => o.value === atual) ? atual : sel.options[0]?.value; sel.disabled = false;
+}
+$('uf').onchange = carregarMunicipios;
+async function acompanharUrnas() {
+  const r = $('urnas-res'); document.querySelectorAll('[data-urnas],#urnas-todas').forEach(x => x.disabled = true);
+  for (;;) {
+    const s = await (await fetch('/api/urnas/status', { cache: 'no-store' })).json();
+    const pct = s.total ? Math.round(s.feitos / s.total * 100) : 0;
+    const resumo = `${s.gravados} boletins gravados${s.pendentes ? `, ${s.pendentes} ainda não publicados pelo TSE` : ''}${s.semSecao.length ? `, ${s.semSecao.length} fora do cadastro de seções (${A.esc(s.semSecao.slice(0, 5).join(', '))}${s.semSecao.length > 5 ? '…' : ''})` : ''}.`;
+    const ign = Object.entries(s.ignorados);
+    const extra = (s.falhas.length ? `<br><b style="color:var(--bad)">${s.falhas.length} falha(s):</b> ${A.esc(s.falhas.slice(0, 3).join(' · '))}${s.falhas.length > 3 ? '…' : ''}` : '')
+      + (ign.length ? `<br>Votos em números fora da lista de candidatos (ignorados): ${ign.length} número(s), ${ign.reduce((a, [, v]) => a + v, 0)} voto(s).` : '');
+    if (s.rodando) r.innerHTML = `Baixando… ${s.feitos}/${s.total} seções (${pct}%). ${resumo}`;
+    else { r.innerHTML = `<b style="color:${s.falhas.length || s.erro ? 'var(--bad)' : 'var(--ok)'}">${s.erro ? 'Falhou: ' + A.esc(s.erro) : 'Importação concluída.'}</b> ${s.total} seções consultadas. ${resumo}${extra}`; break; }
+    await new Promise(ok => setTimeout(ok, 1200));
+  }
+  document.querySelectorAll('[data-urnas],#urnas-todas').forEach(x => x.disabled = false); await A.carregar();
+}
 document.addEventListener('click', async e => {
-  if (e.target.id === 'tse') {
+  if (e.target.id === 'urnas-todas' || e.target.dataset.urnas) {
     await A.pedirLogin();
-    const b = e.target, r = $('tse-res'); b.disabled = true; b.textContent = 'Importando…';
+    try { await A.enviar('POST', '/api/admin/importar-urnas', e.target.dataset.urnas ? { municipio_id: Number(e.target.dataset.urnas) } : { todas: true }); await acompanharUrnas(); }
+    catch (er) { $('urnas-res').innerHTML = `<b style="color:var(--bad)">Falhou:</b> ${A.esc(er.message)}`; }
+    return;
+  }
+  if (e.target.dataset.delmun) {
+    const m = A.D.municipios.find(x => x.id === Number(e.target.dataset.delmun));
+    if (e.target.dataset.sure !== '1') { e.target.dataset.sure = '1'; e.target.textContent = `Confirmar: apaga ${m.nome} e seus boletins`; return; }
+    await A.pedirLogin();
+    try { await A.enviar('DELETE', '/api/municipio', { id: m.id }); A.toast('Cidade excluída.'); await A.carregar(); } catch (er) { A.toast(er.message, true); }
+    return;
+  }
+  if (e.target.id === 'tse' || e.target.id === 'tse-todas') {
+    const todos = e.target.id === 'tse-todas';
+    if (todos && e.target.dataset.sure !== '1') { e.target.dataset.sure = '1'; e.target.textContent = `Confirmar: importar todas as cidades de ${$('uf').value}`; return; }
+    e.target.dataset.sure = '';
+    await A.pedirLogin();
+    const b = e.target, r = $('tse-res'); document.querySelectorAll('#tse,#tse-todas').forEach(x => x.disabled = true); b.textContent = 'Importando…';
     r.textContent = 'Baixando do TSE. O arquivo de seções é grande; na primeira vez pode levar alguns minutos. Não feche esta página.';
     try {
-      const x = await A.enviar('POST', '/api/admin/importar-tse', { uf: $('uf').value.trim().toUpperCase(), municipio: $('mun').value.trim() });
-      r.innerHTML = `<b style="color:var(--ok)">Importação concluída.</b> ${x.candidatos} candidatos, ${x.secoes} seções com boletim (${x.agregadas} agregadas somadas às principais) em ${x.locais} locais, ${x.comCoordenadas} com coordenadas no mapa.${x.limpouExemplo ? ' Dados de exemplo apagados.' : ''}${x.removidos ? ` ${x.removidos} candidato(s) fora da lista removido(s).` : ''}${x.avisos?.length ? '<br>Aviso: ' + x.avisos.map(A.esc).join(' ') : ''}`;
-      await A.carregar();
+      const x = await A.enviar('POST', '/api/admin/importar-tse', { uf: $('uf').value, municipio: $('mun').value, todos });
+      r.innerHTML = `<b style="color:var(--ok)">${todos ? x.cidades + ' cidades importadas.' : A.esc(x.municipio) + ' importada.'}</b> ${x.candidatos} candidatos, ${x.secoes} seções com boletim (${x.agregadas} agregadas somadas às principais) em ${x.locais} locais, ${x.comCoordenadas} com coordenadas no mapa.${x.limpouExemplo ? ' Dados de exemplo apagados.' : ''}${x.removidos ? ` ${x.removidos} candidato(s) fora da lista removido(s).` : ''}${x.avisos?.length ? '<br>Aviso: ' + x.avisos.map(A.esc).join(' ') : ''}`;
+      await (todos ? A.carregar() : A.escolherMunicipio(x.municipio_id));
     } catch (er) { r.innerHTML = `<b style="color:var(--bad)">Falhou:</b> ${A.esc(er.message)}`; }
-    b.disabled = false; b.textContent = 'Importar do TSE'; return;
+    document.querySelectorAll('#tse,#tse-todas').forEach(x => x.disabled = false); $('tse').textContent = 'Importar esta cidade'; $('tse-todas').textContent = 'Importar todas as cidades da UF'; marcarCadastradas(); return;
   }
   const imp = e.target.dataset.imp, z = e.target.dataset.z;
   if (e.target.id === 'base-salvar') {
@@ -82,7 +151,7 @@ document.addEventListener('click', async e => {
   }
   if (imp) {
     await A.pedirLogin();
-    try { const r = await A.enviar('POST', '/api/admin/importar', { tipo: imp, csv: $(imp === 'secoes' ? 'csv-secoes' : 'csv-cands').value }); A.toast(`${r.n} linhas importadas.`); await A.carregar(); } catch (er) { A.toast(er.message, true); }
+    try { const r = await A.enviar('POST', '/api/admin/importar', { tipo: imp, municipio_id: A.D.municipioId === 'todas' && A.D.municipios.length === 1 ? A.D.municipios[0].id : A.D.municipioId, csv: $(imp === 'secoes' ? 'csv-secoes' : 'csv-cands').value }); A.toast(`${r.n} linhas importadas.`); await A.carregar(); } catch (er) { A.toast(er.message, true); }
   }
   if (z) {
     if (e.target.dataset.sure !== '1') { e.target.dataset.sure = '1'; e.target.textContent = 'Clique de novo para confirmar'; return; }
@@ -93,5 +162,7 @@ document.addEventListener('click', async e => {
 });
 await A.iniciar();
 A.menu('/admin');
-A.aoMudar(render); render();
+A.aoMudar(render); A.aoMudar(marcarCadastradas); render();
+if (A.D.municipios[0]) $('uf').value = A.D.municipios[0].uf;
+carregarMunicipios();
 </script></body></html>

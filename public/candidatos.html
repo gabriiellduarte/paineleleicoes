@@ -5,11 +5,22 @@
 <style>
 .star{width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--muted);font-size:20px;line-height:1;cursor:pointer}
 .star[aria-pressed="true"]{background:var(--warn);border-color:var(--warn);color:#fff}
-.crow{display:grid;grid-template-columns:40px 64px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.crow{display:grid;grid-template-columns:40px 64px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .crow .sw{height:30px}
 .crow small{display:block;color:var(--muted);font-size:12px}
+.vg{display:block;width:130px;text-align:right;font:500 14px var(--f-mono);padding:6px 8px}
+.vgl{display:block;font:400 10px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;text-align:right}
 .crow .v{font:500 14px var(--f-mono);text-align:right}
-</style></head>
+</style><!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5KPR9F449"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-Q5KPR9F449');
+</script>
+</head>
 <body>
 <header class="topbar"><select class="sel" id="cargo" aria-label="Cargo"></select><span class="live" id="live"></span></header>
 <main>
@@ -17,7 +28,7 @@
     <div class="card-h"><div><h2>Candidatos</h2><p class="muted" id="resumo"></p></div>
       <div class="chips"><button class="chip on" data-m="todos">Todos</button><button class="chip" data-m="fav">Só favoritos</button><button class="btn" id="limpar" style="padding:5px 12px;font-size:12px">Limpar favoritos</button></div></div>
     <input class="inp" id="busca" placeholder="Buscar por nome, número ou partido…" autocomplete="off">
-    <p class="muted" style="font-size:13px">Marque com a estrela quem você quer acompanhar. No dashboard e no telão, o resultado do município mostra só os favoritos do cargo; sem favoritos, mostra os 10 primeiros colocados.</p>
+    <p class="muted" style="font-size:13px">Marque com a estrela quem você quer acompanhar. No dashboard e no telão, o resultado mostra só os favoritos; sem favoritos, os 10 primeiros. Nos favoritos, preencha “Votos gerais” (a votação total do candidato): ela aparece ao lado dos votos de Aracati.</p>
     <div id="lista"></div>
   </div>
 </main>
@@ -38,7 +49,7 @@ function render() {
   const b = norm(busca);
   const lista = todos.filter(c => (modo === 'todos' || c.favorito) && (!b || norm(c.nome).includes(b) || c.numero.startsWith(b) || norm(c.partido).includes(b)))
     .sort((x, y) => (y.favorito || 0) - (x.favorito || 0) || x.nome.localeCompare(y.nome, 'pt-BR'));
-  $('lista').innerHTML = lista.map(c => `<div class="crow"><button class="star" data-id="${c.id}" aria-pressed="${c.favorito ? 'true' : 'false'}" aria-label="${c.favorito ? 'Remover dos' : 'Adicionar aos'} favoritos: ${A.esc(c.nome)}">${c.favorito ? '★' : '☆'}</button><div class="sw" style="background:${c.cor}">${A.esc(c.numero)}</div><div style="min-width:0"><b>${A.esc(c.nome)}</b><small>${A.esc(c.partido)}${c.vice ? ' · vice ' + A.esc(c.vice) : ''}</small></div><span class="v">${res.apuradas ? A.fmt(votos.get(c.id) || 0) + ' votos' : ''}</span></div>`).join('')
+  $('lista').innerHTML = lista.map(c => `<div class="crow"><button class="star" data-id="${c.id}" aria-pressed="${c.favorito ? 'true' : 'false'}" aria-label="${c.favorito ? 'Remover dos' : 'Adicionar aos'} favoritos: ${A.esc(c.nome)}">${c.favorito ? '★' : '☆'}</button><div class="sw" style="background:${c.cor}">${A.esc(c.numero)}</div><div style="min-width:0"><b>${A.esc(c.nome)}</b><small>${A.esc(c.partido)}${c.vice ? ' · vice ' + A.esc(c.vice) : ''}</small></div><span class="v">${res.apuradas ? A.fmt(votos.get(c.id) || 0) + ' votos' : ''}</span>${c.favorito ? `<label class="vgl">Votos gerais<input class="inp vg" data-vg="${c.id}" inputmode="numeric" placeholder="—" value="${c.votos_gerais ?? ''}"></label>` : '<span></span>'}</div>`).join('')
     || `<div class="empty">${modo === 'fav' ? 'Nenhum favorito neste cargo ainda.' : 'Nenhum candidato encontrado.'}</div>`;
 }
 
@@ -61,9 +72,25 @@ document.addEventListener('click', async e => {
     render();
   }
 });
+async function salvarGeral(inp) {
+  const id = Number(inp.dataset.vg), c = A.D.candidatos.find(x => x.id === id);
+  const v = inp.value.replace(/\D/g, '');
+  if ((c.votos_gerais == null ? '' : String(c.votos_gerais)) === v) return;
+  await A.pedirLogin();
+  try { await A.enviar('POST', '/api/votos-gerais', { id, votos: v }); c.votos_gerais = v === '' ? null : Number(v); A.toast('Votos gerais salvos.'); }
+  catch (e) { A.toast(e.message, true); }
+}
+document.addEventListener('input', e => { if (e.target.dataset?.vg !== undefined) e.target.value = e.target.value.replace(/\D/g, ''); });
+document.addEventListener('change', e => { if (e.target.dataset?.vg !== undefined) salvarGeral(e.target); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.target.dataset?.vg === undefined) return;
+  e.preventDefault();
+  const todos = [...document.querySelectorAll('.vg')], i = todos.indexOf(e.target);
+  salvarGeral(e.target); (todos[i + 1] || e.target).focus();
+});
 $('busca').oninput = e => { busca = e.target.value; render(); };
 await A.iniciar();
 A.menu('/candidatos');
 A.seletorCargo($('cargo'), render);
-A.aoMudar(render); render();
+A.aoMudar(() => { if (!document.activeElement?.matches?.('.vg')) render(); }); render();
 </script></body></html>

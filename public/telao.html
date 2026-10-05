@@ -8,7 +8,8 @@
 :root{color-scheme:light}
 html,body{height:100%;overflow:hidden;background:#f3f6f5;color:#12201c}
 .tv{--mut:#667771;--line:#dce4e1;--acc:#0b6e5a;--card:#ffffff;--ink2:#12201c;height:100%;padding:clamp(14px,2vw,32px);display:grid;grid-template-rows:auto 1fr auto;gap:clamp(10px,1.6vw,22px)}
-.tv-h{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.tv-h{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.tit{display:flex;align-items:baseline;gap:clamp(12px,1.6vw,28px);flex-wrap:wrap;min-width:0}
 .tv-h .k{font:500 clamp(12px,1.2vw,18px) var(--f-mono);color:var(--mut);letter-spacing:.1em;text-transform:uppercase}
 .tv-h h1{color:var(--ink2);font:800 clamp(24px,3.6vw,56px) var(--f-display)}
 .tv-h .hora{font:500 clamp(14px,1.6vw,24px) var(--f-mono);color:var(--mut);text-align:right}
@@ -39,16 +40,29 @@ html,body{height:100%;overflow:hidden;background:#f3f6f5;color:#12201c}
 .g-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:1px solid var(--line);padding-bottom:4px}
 .g-h h3{font:800 clamp(14px,1.7vw,26px) var(--f-display);color:var(--ink2);letter-spacing:.01em}
 .g-h span{font:400 clamp(10px,1vw,15px) var(--f-mono);color:var(--mut)}
-.r2{display:grid;grid-template-columns:clamp(56px,6.4vw,104px) minmax(0,1fr) auto;gap:clamp(6px,1vw,16px);align-items:center;padding:clamp(1px,.4vh,6px) 0}
-.r2 .nb{font:500 clamp(12px,1.4vw,22px) var(--f-mono);color:#fff;border-radius:8px;padding:clamp(2px,.4vh,6px) 0;text-align:center;letter-spacing:.02em}
-.r2 .nm{color:var(--ink2);font:600 clamp(14px,1.9vw,30px) var(--f-display);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.r2 .vt{color:var(--ink2);font:500 clamp(20px,3vw,48px) var(--f-mono);font-variant-numeric:tabular-nums;line-height:1.1}
+.r2{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:clamp(6px,1vw,16px);align-items:center;padding:clamp(1px,.4vh,6px) 0}
+.r2 .id{display:flex;flex-direction:column;align-items:flex-start;gap:clamp(2px,.4vh,6px);min-width:0}
+.r2 .nb{font:500 clamp(10px,.95vw,16px) var(--f-mono);color:#fff;border-radius:6px;padding:clamp(1px,.25vh,3px) clamp(8px,.8vw,14px);letter-spacing:.02em}
+.r2 .nm{color:var(--ink2);font:600 clamp(13px,1.45vw,24px)/1.15 var(--f-display);min-width:0;overflow-wrap:anywhere}
+.r2 .vt{color:var(--ink2);font:500 clamp(28px,4vw,72px) var(--f-mono);font-variant-numeric:tabular-nums;line-height:1.1}
+.r2 .vt{display:flex;flex-direction:column;align-items:flex-end}
+.r2 .vt small{font:400 clamp(9px,.9vw,13px) var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.r2 .vt em{font:500 clamp(12px,1.4vw,22px) var(--f-mono);font-style:normal;color:var(--mut);display:flex;align-items:baseline;gap:6px}
 .r2.foco .nm,.r2.foco .vt{color:var(--acc)}
-</style></head>
+</style><!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5KPR9F449"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-Q5KPR9F449');
+</script>
+</head>
 <body>
 <div class="tv">
   <div class="tv-h">
-    <div><div class="k" id="k"></div><h1>Apuração em tempo real</h1></div>
+    <div class="tit"><h1>Apuração em tempo real</h1><div class="k" id="k"></div></div>
     <div class="hora"><div id="hora"></div><div id="live" class="live" style="justify-content:flex-end"></div></div>
   </div>
   <div class="tv-main">
@@ -74,12 +88,12 @@ function render() {
   // Favoritos de todos os cargos de uma vez; sem favoritos, os 10 primeiros do cargo em exibição.
   const grupos = A.D.cargos.map(c => ({ c, r: A.resultado(c.id) })).filter(g => g.r.modo === 'favoritos');
   const lista = grupos.length ? grupos : [{ c: A.D.cargos.find(x => x.id === cargo), r: A.resultado(cargo) }];
-  const linha = c => `<div class="r2 ${foco && c.numero === foco ? 'foco' : ''}"><span class="nb" style="background:${c.cor}">${A.esc(c.numero)}</span><span class="nm">${A.esc(c.nome)}</span><span class="vt">${A.fmt(c.votos)}</span></div>`;
+  const linha = c => `<div class="r2 ${foco && c.numero === foco ? 'foco' : ''}"><div class="id"><span class="nb" style="background:${c.cor}">${A.esc(c.numero)}</span><span class="nm">${A.esc(c.nome)}</span></div><span class="vt">${A.fmt(c.votos)}<small>${A.esc(A.D.rotulo)}</small>${c.votos_gerais != null ? `<em>${A.fmt(c.votos_gerais)}<small>geral</small></em>` : ''}</span></div>`;
   $('rank').innerHTML = `<div class="grid-g">${lista.map(g => `<div class="g"><div class="g-h"><h3>${A.esc(g.c?.nome || '')}</h3><span>${g.r.apuradas}/${g.r.secoesTotal} seções</span></div>${g.r.exibidos.map(linha).join('') || '<div class="empty">Sem candidatos.</div>'}</div>`).join('')}</div>`;
   // Mapa e andamento: do cargo com mais seções apuradas entre os exibidos.
   const base = lista.reduce((m, g) => (g.r.apuradas > m.r.apuradas ? g : m), lista[0]);
   const res = base.r, ref = base.c?.id || cargo;
-  $('k').textContent = `${A.D.config.municipio || 'Aracati'} · ${grupos.length ? 'Favoritos' : base.c?.nome} · 1º turno`;
+  $('k').textContent = `${A.D.rotulo} · ${grupos.length ? 'Favoritos' : base.c?.nome} · 1º turno`;
   $('pct').textContent = A.pct(res.apuradas, res.secoesTotal);
   $('sub').textContent = `das seções apuradas · ${res.apuradas} de ${res.secoesTotal}`;
   $('prog').style.width = (res.secoesTotal ? res.apuradas / res.secoesTotal * 100 : 0) + '%';

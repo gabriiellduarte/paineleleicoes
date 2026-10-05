@@ -6,7 +6,16 @@
 .grp-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
 .grp-h h3{font-size:16px}
 .tot{font:500 12px var(--f-mono);color:var(--muted)}.tot.no{color:var(--bad);font-weight:600}
-</style></head>
+</style><!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5KPR9F449"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-Q5KPR9F449');
+</script>
+</head>
 <body>
 <header class="topbar"><label class="muted" for="modo" style="font-size:12px">Listar</label><select class="sel" id="modo" aria-label="O que listar"></select><span class="live" id="live"></span></header>
 <main>
@@ -67,8 +76,10 @@ function ordenadas() {
 }
 
 function renderLista() {
-  $('lista').innerHTML = ordenadas().map(({ s, st, loc }) => `<button class="li ${s.id === sel ? 'on' : ''}" data-s="${s.id}"><div><b>${s.zona}/${String(s.numero).padStart(4, '0')}</b><small>${A.esc(loc?.nome)}</small></div><span class="pill"><i class="${A.CLASSE[st]}"></i>${A.ROTULO[st]}</span></button>`).join('')
+  const todas = ordenadas();
+  $('lista').innerHTML = todas.slice(0, 300).map(({ s, st, loc }) => `<button class="li ${s.id === sel ? 'on' : ''}" data-s="${s.id}"><div><b>${A.rotuloSecao(s)}</b><small>${A.esc(loc?.nome)}</small></div><span class="pill"><i class="${A.CLASSE[st]}"></i>${A.ROTULO[st]}</span></button>`).join('')
     || '<div class="empty">Nenhuma seção encontrada.</div>';
+  if (todas.length > 300) $('lista').insertAdjacentHTML('beforeend', `<div class="empty">Mostrando 300 de ${todas.length}. Busque pelo número ou escolha uma cidade no topo.</div>`);
 }
 
 // valor digitado em cada campo ('' = não informado)
@@ -84,13 +95,14 @@ function renderForm() {
   if (!s) { $('form').innerHTML = '<div class="empty">Escolha uma seção na lista para lançar o boletim.</div>'; return; }
   const gs = grupos(), fav = modoFav();
   if (!gs.length) { $('form').innerHTML = '<div class="empty">Cadastre os candidatos na aba Cadastro.</div>'; return; }
+  if (!A.garantirCompleta(s.id, renderForm)) { $('form').innerHTML = '<div class="empty">Carregando os votos da seção…</div>'; return; }
   const loc = A.localPorId(s.local_id);
   const salvo = rascunhoLocal[`${s.id}|${modo}`] || {};
   const val = (cargoId, cid) => {
     const d = salvo[cargoId]?.votos?.[cid];
     if (d !== undefined) return d;
-    const v = A.boletim(s.id, cargoId)?.votos?.[cid];
-    return v === undefined ? '' : v;
+    const bo = A.boletim(s.id, cargoId);
+    return !bo ? '' : (bo.votos?.[cid] ?? 0); // sem linha = 0 voto (o servidor só guarda votos > 0)
   };
   const extra = (cargoId, k) => {
     const d = salvo[cargoId]?.[k];
@@ -111,7 +123,7 @@ function renderForm() {
   };
   const unico = !fav && gs.length === 1 ? A.boletim(s.id, gs[0].cargo.id) : null;
   $('form').innerHTML = `
-    <div class="card-h"><div><h3>Seção ${s.zona}/${String(s.numero).padStart(4, '0')}</h3><div class="muted">${A.esc(loc?.nome)} · ${A.fmt(s.aptos)} aptos</div></div>
+    <div class="card-h"><div><h3>Seção ${A.rotuloSecao(s)}</h3><div class="muted">${A.esc(loc?.nome)} · ${A.fmt(s.aptos)} aptos</div></div>
       <span class="pill"><i class="${A.CLASSE[statusSecao(s.id)]}"></i>${A.ROTULO[statusSecao(s.id)]}</span></div>
     ${s.agregadas ? `<div class="warnbox" style="font-size:13px">Esta urna também recebe os eleitores das seções agregadas ${A.esc(s.agregadas.split(',').join(', '))}. Lance o boletim uma vez só, nesta seção.</div>` : ''}
     ${fav ? '<div class="muted" style="font-size:12px">Mostrando só os favoritos de cada cargo. Campo vazio mantém o valor já lançado. Para lançar brancos, nulos ou outros candidatos, escolha o cargo em “Listar”.</div>' : ''}

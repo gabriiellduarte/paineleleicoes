@@ -87,3 +87,6 @@ tbody tr.click{cursor:pointer}tbody tr.click:hover{background:var(--bg)}
 .warnbox{border:1px solid var(--warn);border-radius:8px;padding:10px 14px;color:var(--ink);background:var(--bg)}
 .leaflet-tooltip.pino{background:none;border:0;box-shadow:none;color:#fff;font:600 12px var(--f-mono);padding:0}
 .leaflet-tooltip.pino:before{display:none}
+.cand .v{display:flex;flex-direction:column;align-items:flex-end}
+.cand .v small{font:400 10px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cand .v em{font:500 15px var(--f-mono);font-style:normal;color:var(--muted);margin-top:2px;display:flex;align-items:baseline;gap:5px}

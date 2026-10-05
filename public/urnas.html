@@ -1,0 +1,198 @@
+<!doctype html><html lang="pt-BR"><head><title>Por seção · Apuração</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+#map{height:560px}
+.secs{display:flex;flex-wrap:wrap;gap:6px}
+.secs .chip{font:500 13px var(--f-mono);display:inline-flex;align-items:center;gap:6px;padding:5px 11px}
+.secs .chip i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.resumo div{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.resumo span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.resumo b{font:500 18px var(--f-mono)}
+.pos{font:500 12px var(--f-mono);color:var(--muted);min-width:2.2em;text-align:right}
+.lista{display:flex;flex-direction:column;gap:12px;max-height:520px;overflow:auto;padding-right:4px}
+.lista .cand{grid-template-columns:auto auto 1fr auto}
+.lista .cand .v{font-size:22px}
+@media(max-width:900px){#map{height:360px}}
+</style><!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5KPR9F449"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-Q5KPR9F449');
+</script>
+</head>
+<body>
+<header class="topbar"><span class="live" id="live"></span></header>
+<main>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-h"><h3>Mapa dos locais de votação</h3>
+        <div class="legend"><span><i class="s-ok"></i>apurado</span><span><i class="s-part"></i>em andamento</span></div></div>
+      <div id="map"></div>
+      <div class="muted" style="font-size:12px">Clique em um local e depois nas seções dele: cada seção clicada é somada ao resultado ao lado (clique de novo para tirar). Sem nenhuma seção, o painel mostra o resumo da cidade. Pinos azuis têm seções selecionadas.</div>
+    </div>
+    <div class="card">
+      <div class="chips" id="barra" style="align-items:center">
+        <input class="inp" id="cand" list="cands" placeholder="Candidato: digite o nome…" autocomplete="off" style="flex:1;min-width:200px"><datalist id="cands"></datalist>
+        <button class="btn" id="cand-x" hidden>✕ Candidato</button>
+        <input class="inp" id="busca" placeholder="Ir para a seção nº…" inputmode="numeric" style="width:150px">
+      </div>
+      <div id="painel" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+  </div>
+</main>
+<script type="module">
+import * as A from '/app.js';
+const $ = id => document.getElementById(id);
+// Seções clicadas vão sendo somadas; sem nenhuma, o painel mostra o resumo do cargo na cidade toda.
+let mapa, localSel = null, busca = '', verTodos = false, focoId = null; // focoId: candidato escolhido
+const sel = new Set();
+const pad = n => String(n).padStart(4, '0');
+const secoesDe = lid => A.D.secoes.filter(s => s.local_id === lid).sort((a, b) => a.zona - b.zona || a.numero - b.numero);
+const LIMITE = 50;
+
+// Soma dos boletins apurados das seções escolhidas: votos de cada candidato, legenda, brancos, nulos.
+function somar(cargo) {
+  const ids = [...sel];
+  if (!A.garantirCompletas(ids, render)) return null; // ainda buscando os votos completos
+  const votos = new Map();
+  let legenda = 0, brancos = 0, nulos = 0, comp = 0, aptos = 0, apuradas = 0;
+  for (const id of ids) {
+    const b = A.boletim(id, cargo.id), s = A.secaoPorId(id);
+    if (!b || b.status !== 'apurada') continue;
+    apuradas++; aptos += s?.aptos || 0; legenda += b.legenda || 0; brancos += b.brancos; nulos += b.nulos; comp += b.comparecimento;
+    for (const c in b.votos) votos.set(+c, (votos.get(+c) || 0) + b.votos[c]);
+  }
+  const cands = A.candidatosDe(cargo.id).map(c => ({ ...c, v: votos.get(c.id) || 0 }));
+  return { cands, legenda, brancos, nulos, comp, aptos, apuradas, secoes: ids.length };
+}
+function resumoGeral(cargo) {
+  const r = A.resultado(cargo.id);
+  return { cands: r.rank.map(c => ({ ...c, v: c.votos })), legenda: r.legenda, brancos: r.brancos, nulos: r.nulos, comp: r.comp, aptos: r.aptosApuradas, apuradas: r.apuradas, secoes: r.secoesTotal };
+}
+
+function ranking(d) {
+  if (!d.apuradas) return '<div class="empty">Nenhuma das seções escolhidas tem boletim apurado para este cargo.</div>';
+  const cands = d.cands.filter(c => c.v > 0).sort((a, b) => b.v - a.v || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const validos = cands.reduce((t, c) => t + c.v, 0) + d.legenda;
+  const max = cands[0]?.v || 1;
+  const mostrados = verTodos ? cands : cands.slice(0, LIMITE);
+  const linhas = mostrados.map((c, i) => `<div class="cand"><span class="pos">${i + 1}º</span><span class="n">${A.esc(c.numero)}</span><span class="name">${A.esc(c.nome)}${c.partido ? ` <span class="muted" style="font-weight:400">${A.esc(c.partido)}</span>` : ''}</span><span class="v">${A.fmt(c.v)}<small>${A.pct(c.v, validos)} dos válidos</small></span><div class="track"><i style="width:${c.v / max * 100}%;background:${c.cor}"></i></div></div>`).join('');
+  return `<div class="resumo">
+      <div><span>Comparecimento</span><b>${A.fmt(d.comp)}</b></div>
+      <div><span>Votos válidos</span><b>${A.fmt(validos)}</b></div>
+      ${d.legenda ? `<div><span>Legenda</span><b>${A.fmt(d.legenda)}</b></div>` : ''}
+      <div><span>Brancos</span><b>${A.fmt(d.brancos)}</b></div>
+      <div><span>Nulos</span><b>${A.fmt(d.nulos)}</b></div>
+    </div>
+    <div class="lista">${linhas || '<div class="empty">Nenhum candidato com votos.</div>'}${cands.length > LIMITE ? `<button class="btn" data-todos="1">${verTodos ? `Mostrar só os ${LIMITE} primeiros` : `Mostrar todos (${cands.length})`}</button>` : ''}</div>`;
+}
+
+// Tudo sobre um candidato: total e posição no conjunto escolhido, e votos dele em cada seção marcada.
+function focoHtml(c, cargo, d) {
+  if (!d.apuradas) return '<div class="empty">Nenhuma das seções escolhidas tem boletim apurado para este cargo.</div>';
+  const todos = [...d.cands].sort((a, b) => b.v - a.v || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const eu = todos.find(x => x.id === c.id), validos = todos.reduce((t, x) => t + x.v, 0) + d.legenda;
+  const pos = todos.filter(x => x.v > 0).findIndex(x => x.id === c.id) + 1, comVoto = todos.filter(x => x.v > 0).length;
+  const lider = todos[0];
+  const tiles = `<div class="resumo">
+      <div><span>Votos de ${A.esc(c.nome.split(' ')[0])}</span><b>${A.fmt(eu.v)}</b></div>
+      <div><span>% dos válidos</span><b>${A.pct(eu.v, validos)}</b></div>
+      <div><span>Posição</span><b>${pos ? `${pos}º de ${comVoto}` : '—'}</b></div>
+      <div><span>Líder</span><b style="font-size:13px">${lider && lider.id !== c.id ? `${A.esc(lider.nome)} · ${A.fmt(lider.v)}` : lider ? 'ele mesmo' : '—'}</b></div>
+    </div>`;
+  const cab = `<div class="muted" style="font-size:13px">${A.esc(c.numero)} · ${A.esc(c.nome)}${c.partido ? ` · ${A.esc(c.partido)}` : ''} · ${A.esc(cargo.nome)}</div>`;
+  if (!sel.size) return `${cab}${tiles}<div class="empty">Clique em locais do mapa e depois nas seções para ver os votos dele em cada uma, somados.</div>`;
+  const linhas = [...sel].map(id => {
+    const b = A.boletim(id, cargo.id), s = A.secaoPorId(id);
+    if (!b || b.status !== 'apurada') return { s, v: null };
+    const v = b.votos[c.id] || 0;
+    const outros = Object.entries(b.votos).filter(([k]) => +k !== c.id).map(([, x]) => x);
+    const val = Object.values(b.votos).reduce((t, x) => t + x, 0) + (b.legenda || 0);
+    return { s, v, pct: val ? v / val * 100 : 0, pos: v > 0 ? outros.filter(x => x > v).length + 1 : null };
+  }).sort((a, b) => (b.v ?? -1) - (a.v ?? -1) || a.s.numero - b.s.numero);
+  const max = Math.max(1, ...linhas.map(l => l.v || 0));
+  const corpo = linhas.slice(0, 300).map(l => `<tr><td class="mono">${A.esc(A.rotuloSecao(l.s))}</td><td>${A.esc(A.localPorId(l.s.local_id)?.nome)}</td>${l.v == null ? '<td class="r muted" colspan="3">sem boletim apurado</td>' : `<td class="r mono"><b>${A.fmt(l.v)}</b><div class="bar" style="width:70px;margin:2px 0 0 auto"><i style="width:${l.v / max * 100}%;background:${c.cor}"></i></div></td><td class="r mono">${l.pct.toFixed(1).replace('.', ',')}%</td><td class="r mono">${l.pos ? l.pos + 'º' : '—'}</td>`}</tr>`).join('');
+  return `${cab}${tiles}<div class="tw" style="max-height:340px;overflow:auto"><table><thead><tr><th>Seção</th><th>Local</th><th class="r">Votos</th><th class="r">% da seção</th><th class="r">Posição</th></tr></thead><tbody>${corpo}</tbody></table></div>`;
+}
+
+function render() {
+  const foco = A.D.candidatos.find(c => c.id === focoId) || null;
+  if (focoId && !foco) focoId = null;
+  const cargoId = foco ? foco.cargo_id : A.cargoAtual(), cargo = A.D.cargos.find(c => c.id === cargoId);
+  $('cand-x').hidden = !foco;
+  for (const id of [...sel]) if (!A.secaoPorId(id)) sel.delete(id);          // trocou de cidade
+  if (localSel && !A.localPorId(localSel)) localSel = null;
+  const locaisMarcados = new Set([...sel].map(id => A.secaoPorId(id)?.local_id));
+  A.desenharLocais(mapa, cargoId, l => {
+    localSel = l.id;
+    const ss = secoesDe(l.id);
+    // local com uma seção só: o clique no pino já soma a seção (de novo, tira), sem precisar escolhê-la
+    if (ss.length === 1) sel.has(ss[0].id) ? sel.delete(ss[0].id) : sel.add(ss[0].id);
+    render();
+  }, locaisMarcados);
+
+  const abas = `<div class="chips">${A.D.cargos.map(c => `<button class="chip ${c.id === cargoId ? 'on' : ''}" data-cargo="${c.id}">${A.esc(c.nome)}</button>`).join('')}</div>`;
+
+  const loc = A.localPorId(localSel), secs = loc ? secoesDe(loc.id) : [];
+  const doLocal = loc ? `<div><b>${A.esc(loc.nome)}</b><div class="muted" style="font-size:12px">${A.esc(loc.endereco || '')}${A.D.multi && loc.cidade ? ` · ${A.esc(loc.cidade)}` : ''}</div></div>
+    <div class="secs" aria-label="Seções do local (clique para somar)">${secs.map(s => `<button class="chip ${sel.has(s.id) ? 'on' : ''}" data-sec="${s.id}" aria-pressed="${sel.has(s.id)}"><i style="background:${A.COR_STATUS[A.statusSecao(s.id, cargoId)]}"></i>${s.zona}/${pad(s.numero)}</button>`).join('')}
+      <button class="chip" data-todas-local="1" style="border-style:dashed">+ todas deste local</button></div>`
+    : '<div class="muted" style="font-size:13px">Clique em um local no mapa para escolher as seções; cada seção clicada é somada ao resultado.</div>';
+
+  const nomes = [...sel].map(id => A.secaoPorId(id)).filter(Boolean).sort((a, b) => a.zona - b.zona || a.numero - b.numero).map(s => `${s.zona}/${pad(s.numero)}`);
+  const d = sel.size ? somar(cargo) : resumoGeral(cargo);
+  const titulo = foco ? `${A.esc(foco.nome)} · ` + (sel.size ? `${sel.size} ${sel.size > 1 ? 'seções' : 'seção'}` : A.esc(A.D.rotulo)) : sel.size ? `Soma de ${sel.size} ${sel.size > 1 ? 'seções' : 'seção'}` : `Resumo · ${A.esc(A.D.rotulo)}`;
+  const sub = sel.size ? `${A.esc(nomes.slice(0, 12).join(' · '))}${nomes.length > 12 ? ` · +${nomes.length - 12}` : ''}` : 'Todas as seções apuradas. Clique nas seções de um local para ver só elas, somadas.';
+  $('painel').innerHTML = `<div class="card-h"><h3>${titulo}${d ? ` <span class="muted mono" style="font-size:12px;font-weight:400">· ${A.fmt(d.apuradas)} apurada${d.apuradas === 1 ? '' : 's'}${d.aptos ? ` · ${A.fmt(d.aptos)} aptos` : ''}</span>` : ''}</h3>${sel.size ? '<button class="btn" data-limpar="1">Limpar seleção</button>' : ''}</div>
+    ${abas}
+    ${doLocal}
+    <div class="muted mono" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${A.esc(nomes.join(' · '))}">${sub} · ${A.esc(cargo?.nome)}</div>
+    ${!d ? '<div class="empty">Carregando os votos das seções…</div>' : foco ? focoHtml(foco, cargo, d) : ranking(d)}`;
+}
+
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-cargo]'); if (c) { try { localStorage.setItem('cargo', c.dataset.cargo); } catch {} verTodos = false; focoId = null; $('cand').value = ''; render(); return; }
+  const s = e.target.closest('[data-sec]'); if (s) { const id = Number(s.dataset.sec); sel.has(id) ? sel.delete(id) : sel.add(id); render(); return; }
+  if (e.target.closest('[data-todas-local]')) { secoesDe(localSel).forEach(x => sel.add(x.id)); render(); return; }
+  if (e.target.closest('[data-limpar]')) { sel.clear(); render(); return; }
+  if (e.target.closest('[data-todos]')) { verTodos = !verTodos; render(); }
+});
+const rotuloCand = c => `${c.nome} — ${A.D.cargos.find(x => x.id === c.cargo_id)?.nome} · ${c.partido || 's/ partido'} · ${c.numero}`;
+let rotulos = new Map();
+function montarCandidatos() {
+  if ($('cands').options.length === A.D.candidatos.length) return;
+  rotulos = new Map(A.D.candidatos.map(c => [rotuloCand(c), c.id]));
+  $('cands').innerHTML = [...rotulos.keys()].map(r => `<option value="${A.esc(r)}"></option>`).join('');
+}
+$('cand').addEventListener('input', e => {
+  const id = rotulos.get(e.target.value);
+  if (id != null) { focoId = id; verTodos = false; render(); } // escolheu da lista
+});
+$('cand-x').onclick = () => { focoId = null; $('cand').value = ''; render(); };
+document.addEventListener('input', e => {
+  if (e.target.id !== 'busca') return;
+  busca = e.target.value.trim();
+  const n = Number(busca), s = busca && A.D.secoes.find(x => x.numero === n);
+  if (s) {
+    localSel = s.local_id; sel.add(s.id);
+    render();
+    const l = A.localPorId(s.local_id); if (l.lat != null) mapa?.panTo?.([l.lat, l.lng]);
+  }
+});
+
+await A.iniciar();
+A.menu('/urnas');
+mapa = A.criarMapa($('map'));
+const q = Number(new URLSearchParams(location.search).get('secao'));
+if (q && A.secaoPorId(q)) { localSel = A.secaoPorId(q).local_id; sel.add(q); }
+A.aoMudar(() => { montarCandidatos(); render(); }); montarCandidatos(); render();
+setTimeout(() => mapa?.invalidateSize(), 300);
+</script></body></html>

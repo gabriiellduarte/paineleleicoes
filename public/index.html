@@ -3,17 +3,27 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="/app.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script><style>.rankbox{display:flex;flex-direction:column;gap:20px;max-height:640px;overflow:auto}.grp{display:flex;flex-direction:column;gap:12px}.grp+.grp{border-top:1px solid var(--line);padding-top:16px}.grp-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}</style></head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script><style>.rankbox{display:flex;flex-direction:column;gap:20px;max-height:640px;overflow:auto}.grp{display:flex;flex-direction:column;gap:12px}.grp+.grp{border-top:1px solid var(--line);padding-top:16px}.grp-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}</style><!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5KPR9F449"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-Q5KPR9F449');
+</script>
+</head>
 <body>
 <header class="topbar"><select class="sel" id="cargo" aria-label="Cargo"></select><span class="live" id="live"></span></header>
 <main>
+  <div class="card" id="soma" style="min-height:150px"></div>
   <div class="kpis" id="kpis"></div>
   <div class="grid2">
     <div class="card">
       <div class="card-h"><h3>Mapa dos locais de votação</h3>
         <div class="legend"><span><i class="s-ok"></i>apurado</span><span><i class="s-part"></i>em andamento</span><span><i class="s-wait"></i>aguardando</span></div></div>
       <div id="map"></div>
-      <div class="muted" style="font-size:12px">O mapa mostra só os locais que já têm votos lançados. O número no pino é a quantidade de seções do local. Clique para filtrar a tabela por ele.</div>
+      <div class="muted" style="font-size:12px">O mapa mostra só os locais que já têm votos lançados. O número no pino é a quantidade de seções do local. Clique nos pinos para somar vários locais (painel no topo) e filtrar a tabela; clique de novo para tirar.</div>
     </div>
     <div class="card"><div class="card-h"><h3>Resultado do município</h3><span class="muted mono" style="font-size:12px" id="modo"></span></div><div id="rank" class="rankbox"></div></div>
   </div>
@@ -25,8 +35,20 @@
 </main>
 <script type="module">
 import * as A from '/app.js';
-let filtro='todas', busca='', localSel=null, mapa;
+let filtro='todas', busca='', locaisSel=new Set(), mapa;
 const $=id=>document.getElementById(id);
+// Painel no topo: soma dos votos nos locais marcados no mapa (mesmos candidatos exibidos no resultado).
+function renderSoma(grupos,cargo){
+  const el=$('soma');
+  if(!locaisSel.size){ el.innerHTML='<div class="card-h"><h3>Soma por locais de votação</h3></div><div class="muted">Clique nos pinos do mapa para ir somando os locais: aqui aparecem os votos dos candidatos nos locais escolhidos.</div>'; return; }
+  const alvo=grupos.length?grupos.map(g=>g.c.id):[cargo];
+  const rs=alvo.map(id=>({c:A.D.cargos.find(x=>x.id===id),r:A.resultado(id,locaisSel)}));
+  const nomes=[...locaisSel].map(id=>A.localPorId(id)?.nome).filter(Boolean);
+  const secs=rs[0].r.secoesTotal, aptos=rs[0].r.aptosTotal;
+  el.innerHTML=`<div class="card-h"><h3>Soma de ${nomes.length} ${nomes.length>1?'locais':'local'} · ${secs} seç${secs===1?'ão':'ões'} · ${A.fmt(aptos)} aptos</h3><button class="btn" data-f="limpar-tudo">Limpar seleção</button></div>
+   <div class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${A.esc(nomes.join(' · '))}">${A.esc(nomes.join(' · '))}</div>
+   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:10px">${rs.map(({c,r})=>`<div class="grp"><div class="grp-h"><h3>${A.esc(c.nome)}</h3><span class="muted mono" style="font-size:12px">${r.apuradas}/${r.secoesTotal} seções · ${A.fmt(r.validos)} válidos</span></div><div class="rank">${A.rankingHtml(r,'selecionados')}</div></div>`).join('')}</div>`;
+}
 function render(){
   const cargo=A.cargoAtual(), res=A.resultado(cargo), cands=A.candidatosDe(cargo);
   const comp=res.aptosApuradas?A.pct(res.comp,res.aptosApuradas):'—';
@@ -49,27 +71,36 @@ function render(){
     $('rank').innerHTML=A.rankingHtml(res)
       +'<div class="muted" style="font-size:12px">Marque favoritos na aba Candidatos para acompanhar vários cargos aqui.</div>';
   }
-  A.desenharLocais(mapa,cargo,l=>{localSel=localSel===l.id?null:l.id;render();});
+  for(const id of [...locaisSel]) if(!A.localPorId(id)) locaisSel.delete(id); // trocou de cidade
+  A.desenharLocais(mapa,cargo,l=>{locaisSel.has(l.id)?locaisSel.delete(l.id):locaisSel.add(l.id);render();},locaisSel);
+  renderSoma(grupos,cargo);
+  // Tabela: colunas = favoritos de todos os cargos (sem favoritos, os 10 primeiros do cargo selecionado).
+  const alvo=grupos.length?grupos:[{c:A.D.cargos.find(x=>x.id===cargo),r:res}];
+  const colunas=alvo.flatMap(g=>g.r.exibidos.map(cd=>({cargo:g.c,cd})));
+  const ABREV={presidente:'Pres',governador:'Gov',senador:'Sen',dep_federal:'D.Fed',dep_estadual:'D.Est'};
+  const stSec=sid=>{const st=alvo.map(g=>A.statusSecao(sid,g.c.id)); if(st.every(x=>x==='apurada')) return 'apurada'; return st.some(x=>x!=='aguardando')?'rascunho':'aguardando';};
   const cont={todas:A.D.secoes.length,apurada:0,rascunho:0,aguardando:0};
-  A.D.secoes.forEach(s=>cont[A.statusSecao(s.id,cargo)]++);
+  A.D.secoes.forEach(s=>cont[stSec(s.id)]++);
   $('chips').innerHTML=[['todas','Todas'],['apurada','Apuradas'],['rascunho','Em lançamento'],['aguardando','Aguardando']].map(([k,t])=>`<button class="chip ${filtro===k?'on':''}" data-f="${k}">${t} ${cont[k]}</button>`).join('')
    +`<input class="inp" id="busca" placeholder="Buscar seção ou local…" value="${A.esc(busca)}" style="width:190px">`
-   +(localSel?`<button class="chip on" data-f="limpar">Local: ${A.esc(A.localPorId(localSel)?.nome)} ✕</button>`:'');
-  $('thead').innerHTML='<tr><th>Seção</th><th>Local de votação</th><th class="r">Aptos</th><th class="r">Compar.</th>'+cands.map(c=>`<th class="r">${A.esc(c.numero)}</th>`).join('')+'<th>Status</th><th>Atualizado</th></tr>';
+   +(locaisSel.size?`<button class="chip on" data-f="limpar">${locaisSel.size===1?'Local: '+A.esc(A.localPorId([...locaisSel][0])?.nome):locaisSel.size+' locais'} ✕</button>`:'');
+  $('thead').innerHTML='<tr><th>Seção</th><th>Local de votação</th><th class="r">Aptos</th>'+colunas.map(({cargo:c,cd})=>`<th class="r" title="${A.esc(c.nome)}: ${A.esc(cd.nome)}">${alvo.length>1?`<small style="display:block;font-weight:400;opacity:.7">${ABREV[c.id]||A.esc(c.nome)}</small>`:''}${A.esc(cd.numero)}</th>`).join('')+'<th>Status</th><th>Atualizado</th></tr>';
   const b=busca.toLowerCase();
   const rows=A.D.secoes.filter(s=>{
-    const st=A.statusSecao(s.id,cargo), l=A.localPorId(s.local_id);
-    return (filtro==='todas'||st===filtro)&&(!localSel||s.local_id===localSel)&&(!b||String(s.numero).includes(b)||(l?.nome||'').toLowerCase().includes(b));
+    const l=A.localPorId(s.local_id);
+    return (filtro==='todas'||stSec(s.id)===filtro)&&(!locaisSel.size||locaisSel.has(s.local_id))&&(!b||String(s.numero).includes(b)||(l?.nome||'').toLowerCase().includes(b));
   });
-  $('tbody').innerHTML=rows.map(s=>{
-    const bo=A.boletim(s.id,cargo), st=bo?.status||'aguardando', l=A.localPorId(s.local_id);
-    const v=bo&&st==='apurada';
-    return `<tr class="click" data-s="${s.id}"><td class="mono">${s.zona}/${String(s.numero).padStart(4,'0')}</td><td>${A.esc(l?.nome)}</td><td class="r mono">${A.fmt(s.aptos)}</td><td class="r mono">${bo?A.fmt(bo.comparecimento):'—'}</td>${cands.map(c=>`<td class="r mono">${bo?A.fmt(bo.votos[c.id]||0):'—'}</td>`).join('')}<td><span class="pill"><i class="${A.CLASSE[st]}"></i>${A.ROTULO[st]}</span></td><td class="mono">${bo?new Date(bo.updated_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—'}</td></tr>`;
-  }).join('')||`<tr><td colspan="${6+cands.length}" class="empty">Nenhuma seção neste filtro.</td></tr>`;
+  const LIM=300, mais=rows.length-LIM;
+  $('tbody').innerHTML=rows.slice(0,LIM).map(s=>{
+    const st=stSec(s.id), l=A.localPorId(s.local_id);
+    const ult=alvo.map(g=>A.boletim(s.id,g.c.id)?.updated_at).filter(Boolean).sort().pop();
+    return `<tr class="click" data-s="${s.id}"><td class="mono">${A.rotuloSecao(s)}</td><td>${A.esc(l?.nome)}</td><td class="r mono">${A.fmt(s.aptos)}</td>${colunas.map(({cargo:c,cd})=>{const bo=A.boletim(s.id,c.id);return `<td class="r mono">${bo?A.fmt(bo.votos[cd.id]||0):'—'}</td>`;}).join('')}<td><span class="pill"><i class="${A.CLASSE[st]}"></i>${A.ROTULO[st]}</span></td><td class="mono">${ult?new Date(ult).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—'}</td></tr>`;
+  }).join('')||`<tr><td colspan="${5+colunas.length}" class="empty">Nenhuma seção neste filtro.</td></tr>`;
+  if(mais>0) $('tbody').insertAdjacentHTML('beforeend',`<tr><td colspan="${5+colunas.length}" class="empty">Mostrando ${LIM} de ${rows.length} seções. Use a busca, o mapa ou escolha uma cidade no topo.</td></tr>`);
 }
 document.addEventListener('click',e=>{
-  const f=e.target.closest('[data-f]'); if(f){ if(f.dataset.f==='limpar') localSel=null; else filtro=f.dataset.f; render(); }
-  const tr=e.target.closest('tr[data-s]'); if(tr) location.href=`/lancar?secao=${tr.dataset.s}&cargo=${A.cargoAtual()}`;
+  const f=e.target.closest('[data-f]'); if(f){ if(f.dataset.f==='limpar'||f.dataset.f==='limpar-tudo') locaisSel.clear(); else filtro=f.dataset.f; render(); }
+  const tr=e.target.closest('tr[data-s]'); if(tr) location.href=`/lancar?secao=${tr.dataset.s}`;
 });
 document.addEventListener('input',e=>{ if(e.target.id==='busca'){ busca=e.target.value; const p=e.target.selectionStart; render(); const n=$('busca'); n.focus(); n.setSelectionRange(p,p);} });
 await A.iniciar();
