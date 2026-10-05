@@ -1,5 +1,4 @@
 data/*
-!data/votos.db
 node_modules/
 eleitorado_local_votacao_2026/
 eleitorado_local_votacao_2026.zip
