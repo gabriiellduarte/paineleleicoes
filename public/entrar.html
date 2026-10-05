@@ -1,0 +1,48 @@
+<!doctype html><html lang="pt-BR"><head><title>Entrar · Apuração</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/app.css">
+<style>
+main.entrada{max-width:420px;margin:8vh auto 0}
+.entrada form{display:grid;gap:12px}
+.entrada .num{text-align:left}
+#erro{color:var(--bad);font-weight:600;min-height:1.3em}
+</style></head>
+<body>
+<main class="entrada">
+  <div class="card">
+    <a class="brand" href="/" style="margin:0">Apuração<small>ELEIÇÕES 2026</small></a>
+    <h2 style="margin:6px 0 0">Entrar</h2>
+    <p class="muted" id="msg">Esta tela é restrita. Informe seu nome (fica no histórico dos lançamentos) e o PIN combinado com a coordenação.</p>
+    <form id="f">
+      <input class="num" id="user" placeholder="Seu nome" autocomplete="name" required>
+      <input class="num" id="pin" placeholder="PIN" type="password" inputmode="numeric" autocomplete="off" required>
+      <div id="erro" role="alert"></div>
+      <button class="btn pri" id="ok">Entrar</button>
+    </form>
+    <a href="/" class="muted" style="font-size:13px">← Voltar ao dashboard (acesso público)</a>
+  </div>
+</main>
+<footer class="rodape">Desenvolvido por <b>gdtech Soluções</b> · <a href="https://wa.me/5588999226302" target="_blank" rel="noopener">WhatsApp (88) 99922-6302</a></footer>
+<script>
+// destino depois de entrar: só caminhos deste site
+const volta = (() => { const v = new URLSearchParams(location.search).get('volta') || '/'; return v.startsWith('/') && !v.startsWith('//') ? v : '/'; })();
+const $ = id => document.getElementById(id);
+const guardado = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+
+async function entrar(user, pin) {
+  const r = await fetch('/api/auth', { method: 'POST', headers: { 'x-pin': pin, 'x-user': encodeURIComponent(user) }, body: '{}' });
+  if (r.ok) { try { localStorage.setItem('pin', pin); localStorage.setItem('user', user); } catch {} location.replace(volta); return true; }
+  const j = await r.json().catch(() => ({}));
+  throw new Error(j.erro || 'Não foi possível entrar.');
+}
+$('user').value = guardado('user');
+$('f').onsubmit = async e => {
+  e.preventDefault(); $('erro').textContent = ''; $('ok').disabled = true;
+  try { await entrar($('user').value.trim(), $('pin').value.trim()); }
+  catch (er) { $('erro').textContent = er.message; $('pin').value = ''; $('pin').focus(); $('ok').disabled = false; }
+};
+// quem já entrou neste aparelho (PIN salvo) é liberado sem digitar de novo
+if (guardado('pin') && guardado('user')) entrar(guardado('user'), guardado('pin')).catch(() => { try { localStorage.removeItem('pin'); } catch {} });
+else $(guardado('user') ? 'pin' : 'user').focus();
+</script></body></html>

@@ -343,9 +343,10 @@ function gravarBoletimUrna(secao, bu) {
 
 // Roda em segundo plano; a tela consulta /api/urnas/status.
 // Cidades: uma (municipio_id), ou todas as cadastradas (todas: true).
-async function importarUrnas({ municipio_id, todas, pleito = PLEITO_PADRAO }) {
+async function importarUrnas({ municipio_id, todas, ids, pleito = PLEITO_PADRAO }) {
   if (urnas.rodando) throw new Error('Já existe uma importação de urnas em andamento.');
-  const cidades = todas ? db.prepare('SELECT * FROM municipios ORDER BY nome').all() : [db.prepare('SELECT * FROM municipios WHERE id=?').get(Number(municipio_id))].filter(Boolean);
+  const lista = Array.isArray(ids) ? ids.map(Number).filter(Number.isInteger) : null; // ids: só estas cidades (ex.: as filtradas na tela)
+  const cidades = todas ? db.prepare('SELECT * FROM municipios ORDER BY nome').all() : lista ? db.prepare('SELECT * FROM municipios ORDER BY nome').all().filter(m => lista.includes(m.id)) : [db.prepare('SELECT * FROM municipios WHERE id=?').get(Number(municipio_id))].filter(Boolean);
   if (!cidades.length) throw new Error(todas ? 'Importe as seções de ao menos uma cidade do TSE antes de importar os boletins de urna.' : 'Escolha uma cidade cadastrada.');
   const fila = [], semSecao = [];
   for (const m of cidades) {
@@ -433,6 +434,19 @@ function excluirLocal(id) {
   db.prepare('DELETE FROM locais WHERE id=?').run(id);
 }
 
+
+// ---------- telas protegidas por PIN (sessão em cookie) ----------
+// Cadastro, seções, lançar e telão só são entregues a quem entrou com o PIN em /entrar.
+const TELAS_COM_PIN = new Set(['/admin', '/secoes', '/lancar', '/telao']);
+const TOKEN_SESSAO = crypto.createHmac('sha256', 'votos26-sessao').update(PIN).digest('hex'); // muda se o PIN mudar
+function temSessao(req) {
+  const m = /(?:^|;\s*)sessao=([0-9a-f]+)/.exec(req.headers.cookie || '');
+  return !!m && m[1].length === TOKEN_SESSAO.length && crypto.timingSafeEqual(Buffer.from(m[1]), Buffer.from(TOKEN_SESSAO));
+}
+// trava tentativas de PIN: 10 erros em 10 minutos bloqueiam aquele endereço por um tempo
+const errosPin = new Map();
+const pinBloqueado = (ip) => { const l = (errosPin.get(ip) || []).filter(t => Date.now() - t < 10 * 60 * 1000); errosPin.set(ip, l); return l.length >= 10; };
+const registrarErroPin = (ip) => errosPin.set(ip, [...(errosPin.get(ip) || []), Date.now()]);
 
 // ---------- chefe de local: link próprio, sem PIN ----------
 const ipsDaRede = () => Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
@@ -535,11 +549,16 @@ http.createServer(async (req, res) => {
       broadcast(); return json(res, 200, { ok: true });
     }
     if (url.pathname.startsWith('/api/') && req.method !== 'GET') {
-      if (req.headers['x-pin'] !== PIN) return json(res, 401, { erro: 'PIN incorreto.' });
+      const ip = req.headers['cf-connecting-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress; // atrás de túnel, o IP real vem no cabeçalho
+      if (pinBloqueado(ip)) return json(res, 429, { erro: 'Muitas tentativas com PIN errado. Aguarde alguns minutos.' });
+      if (req.headers['x-pin'] !== PIN) { registrarErroPin(ip); return json(res, 401, { erro: 'PIN incorreto.' }); }
       versaoDados++; // qualquer escrita invalida o cache
       const usuario = decodeURIComponent(req.headers['x-user'] || 'anônimo').slice(0, 40);
       const body = JSON.parse((await readBody(req)) || '{}');
-      if (url.pathname === '/api/auth') return json(res, 200, { ok: true });
+      if (url.pathname === '/api/auth') { // PIN certo: abre a sessão que libera as telas protegidas (30 dias)
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'set-cookie': `sessao=${TOKEN_SESSAO}; Path=/; Max-Age=${30 * 86400}; HttpOnly; SameSite=Lax` });
+        return res.end('{"ok":true}');
+      }
       if (url.pathname === '/api/admin/link') { const t = tokenDoLocal(Number(body.local_id), !!body.regenerar); return json(res, 200, { ok: true, url: `${baseUrl()}/chefe?t=${t}`, base: baseUrl() }); }
       if (url.pathname === '/api/admin/config') { const v = String(body.base_url || '').trim(); if (v && !/^https?:\/\/[^\s]+$/i.test(v)) throw new Error('Informe o endereço completo, começando com http:// ou https://'); db.prepare("INSERT OR REPLACE INTO config VALUES('base_url',?)").run(v); broadcast(); return json(res, 200, { ok: true, base: baseUrl() }); }
       if (url.pathname === '/api/boletim' && req.method === 'POST') { salvarBoletim(body, usuario); broadcast(); return json(res, 200, { ok: true }); }
@@ -563,6 +582,10 @@ http.createServer(async (req, res) => {
       return json(res, 404, { erro: 'Rota não encontrada.' });
     }
     // estáticos
+    if (TELAS_COM_PIN.has(url.pathname.replace(/\.html$/, '').replace(/\/+$/, '')) && !temSessao(req)) {
+      res.writeHead(302, { location: '/entrar?volta=' + encodeURIComponent(url.pathname + url.search), 'cache-control': 'no-store' });
+      return res.end();
+    }
     let p = url.pathname === '/' ? '/index.html' : url.pathname;
     if (!path.extname(p)) p += '.html';
     const file = path.normalize(path.join(PUB, p));

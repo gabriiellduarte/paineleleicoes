@@ -27,9 +27,11 @@
   </div>
   <div class="card">
     <h2>Cidades cadastradas</h2>
-    <div class="tw"><table><thead><tr><th>Cidade</th><th class="r">Seções</th><th class="r">Boletins</th><th></th></tr></thead><tbody id="cidades"></tbody></table></div>
+    <div class="chips" id="cid-filtros" style="align-items:center"></div>
+    <input class="inp" id="cid-busca" placeholder="Buscar cidade…" autocomplete="off" style="max-width:260px">
+    <div class="tw" style="max-height:420px;overflow:auto"><table><thead><tr><th>Cidade</th><th class="r">Seções</th><th class="r">Boletins</th><th>Urnas</th><th></th></tr></thead><tbody id="cidades"></tbody></table></div>
     <p class="muted">A cidade que aparece no topo de cada página filtra todas as telas. “Importar urnas” baixa os boletins oficiais do TSE e lança os votos de todos os cargos, com brancos, nulos e legenda; pode rodar de novo a qualquer momento (boletins da mesma seção são substituídos pelo oficial, e o histórico guarda o anterior).</p>
-    <div class="actions" style="justify-content:flex-start"><button class="btn pri" id="urnas-todas">Importar urnas de todas as cidades</button></div>
+    <div class="actions" style="justify-content:flex-start"><button class="btn pri" id="urnas-filtradas">Importar urnas das cidades listadas</button><button class="btn" id="urnas-todas">Importar urnas de todas as cidades</button></div>
     <div id="urnas-res" class="muted" aria-live="polite"></div>
   </div>
   <h3 class="muted" style="margin-top:4px">Ou importe por planilha</h3>
@@ -68,14 +70,32 @@
 <script type="module">
 import * as A from '/app.js';
 const $ = id => document.getElementById(id);
+// Situação das urnas de cada cidade: sem boletins, parcial (faltam cargos/seções) ou importada por completo.
+let cidFiltro = 'todas', cidBusca = '';
+const situacaoUrnas = m => !m.boletins_n ? 'sem' : m.boletins_n < m.secoes_n * A.D.cargos.length ? 'parcial' : 'ok';
+const ROT_URNAS = { sem: ['Sem urnas', 's-wait'], parcial: ['Parcial', 's-part'], ok: ['Importada', 's-ok'] };
+function cidadesFiltradas() {
+  const b = A.semAcento(cidBusca);
+  return A.D.municipios.filter(m => (cidFiltro === 'todas' || situacaoUrnas(m) === cidFiltro) && (!b || A.semAcento(m.nome).includes(b)));
+}
+function renderCidades() {
+  const cont = { todas: A.D.municipios.length, sem: 0, parcial: 0, ok: 0 };
+  A.D.municipios.forEach(m => cont[situacaoUrnas(m)]++);
+  $('cid-filtros').innerHTML = [['todas', 'Todas'], ['sem', 'Sem urnas'], ['parcial', 'Parciais'], ['ok', 'Importadas']].map(([k, t]) => `<button class="chip ${cidFiltro === k ? 'on' : ''}" data-cf="${k}">${t} ${cont[k]}</button>`).join('');
+  const lista = cidadesFiltradas();
+  $('cidades').innerHTML = lista.map(m => {
+    const [rot, cls] = ROT_URNAS[situacaoUrnas(m)];
+    return `<tr><td>${A.esc(m.nome)} <span class="muted mono">${A.esc(m.uf)}</span></td><td class="r mono">${A.fmt(m.secoes_n)}</td><td class="r mono">${A.fmt(m.boletins_n)}</td><td><span class="pill"><i class="${cls}"></i>${rot}</span></td><td class="acts"><button class="btn" data-urnas="${m.id}">${m.boletins_n ? 'Reimportar' : 'Importar'} urnas</button><button class="btn bad" data-delmun="${m.id}">Excluir</button></td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="empty">${A.D.municipios.length ? 'Nenhuma cidade neste filtro.' : 'Nenhuma cidade ainda. Importe do TSE acima.'}</td></tr>`;
+  const b = $('urnas-filtradas'); b.textContent = `Importar urnas ${lista.length === A.D.municipios.length ? 'de todas as cidades listadas' : lista.length === 1 ? 'da cidade listada' : `das ${lista.length} cidades listadas`}`; b.disabled = !lista.length;
+}
+$('cid-busca').oninput = e => { cidBusca = e.target.value; renderCidades(); };
 function render() {
   $('demo').innerHTML = A.D.config.demo === '1' ? '<div class="warnbox"><b>Dados de exemplo.</b> Estas seções, locais e candidatos são fictícios, só para testar o sistema. Importe os reais abaixo e apague os de exemplo em “Zerar → Apagar tudo” antes de começar.</div>' : '';
   if (!$('base').dataset.ok) { $('base').value = A.D.config.base_url || ''; $('base').dataset.ok = '1'; }
   $('ids').textContent = A.D.cargos.map(c => c.id).join(', ');
   $('resumo').innerHTML = A.D.cargos.map(c => `<tr><td>${A.esc(c.nome)}</td><td class="r mono">${A.candidatosDe(c.id).length}</td><td class="r mono">${A.D.boletins.filter(b => b.cargo_id === c.id && b.status === 'apurada').length}</td></tr>`).join('');
-  $('cidades').innerHTML = A.D.municipios.map(m => {
-    return `<tr><td>${A.esc(m.nome)} <span class="muted mono">${A.esc(m.uf)}</span></td><td class="r mono">${m.secoes_n}</td><td class="r mono">${m.boletins_n}</td><td class="acts"><button class="btn" data-urnas="${m.id}">Importar urnas</button><button class="btn bad" data-delmun="${m.id}">Excluir</button></td></tr>`;
-  }).join('') || '<tr><td colspan="4" class="empty">Nenhuma cidade ainda. Importe do TSE acima.</td></tr>';
+  renderCidades();
   $('totais').textContent = `${A.D.rotulo}: ` + `${A.D.secoes.length} seções em ${A.D.locais.length} locais de votação · ${A.D.locais.filter(l => l.lat != null).length} locais com coordenadas no mapa.`;
 }
 document.addEventListener('change', e => {
@@ -102,7 +122,7 @@ function marcarCadastradas() {
 }
 $('uf').onchange = carregarMunicipios;
 async function acompanharUrnas() {
-  const r = $('urnas-res'); document.querySelectorAll('[data-urnas],#urnas-todas').forEach(x => x.disabled = true);
+  const r = $('urnas-res'); document.querySelectorAll('[data-urnas],#urnas-todas,#urnas-filtradas').forEach(x => x.disabled = true);
   for (;;) {
     const s = await (await fetch('/api/urnas/status', { cache: 'no-store' })).json();
     const pct = s.total ? Math.round(s.feitos / s.total * 100) : 0;
@@ -114,12 +134,14 @@ async function acompanharUrnas() {
     else { r.innerHTML = `<b style="color:${s.falhas.length || s.erro ? 'var(--bad)' : 'var(--ok)'}">${s.erro ? 'Falhou: ' + A.esc(s.erro) : 'Importação concluída.'}</b> ${s.total} seções consultadas. ${resumo}${extra}`; break; }
     await new Promise(ok => setTimeout(ok, 1200));
   }
-  document.querySelectorAll('[data-urnas],#urnas-todas').forEach(x => x.disabled = false); await A.carregar();
+  document.querySelectorAll('[data-urnas],#urnas-todas,#urnas-filtradas').forEach(x => x.disabled = false); await A.carregar();
 }
 document.addEventListener('click', async e => {
-  if (e.target.id === 'urnas-todas' || e.target.dataset.urnas) {
+  if (e.target.dataset.cf) { cidFiltro = e.target.dataset.cf; renderCidades(); return; }
+  if (e.target.id === 'urnas-todas' || e.target.id === 'urnas-filtradas' || e.target.dataset.urnas) {
     await A.pedirLogin();
-    try { await A.enviar('POST', '/api/admin/importar-urnas', e.target.dataset.urnas ? { municipio_id: Number(e.target.dataset.urnas) } : { todas: true }); await acompanharUrnas(); }
+    const corpo = e.target.dataset.urnas ? { municipio_id: Number(e.target.dataset.urnas) } : e.target.id === 'urnas-filtradas' ? { ids: cidadesFiltradas().map(m => m.id) } : { todas: true };
+    try { await A.enviar('POST', '/api/admin/importar-urnas', corpo); await acompanharUrnas(); }
     catch (er) { $('urnas-res').innerHTML = `<b style="color:var(--bad)">Falhou:</b> ${A.esc(er.message)}`; }
     return;
   }
