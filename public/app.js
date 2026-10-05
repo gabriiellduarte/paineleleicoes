@@ -161,17 +161,38 @@ export function seletorCargo(el, aoTrocar) {
 export function menu(ativo) {
   const itens = [['/', 'Dashboard'], ['/urnas', 'Por seção'], ['/lancar', 'Lançar boletim'], ['/candidatos', 'Candidatos'], ['/secoes', 'Seções'], ['/telao', 'Telão'], ['/admin', 'Cadastro']];
   document.querySelector('.topbar').insertAdjacentHTML('afterbegin',
-    `<a class="brand" href="/">Apuração <span id="brand-mun"></span><small>ELEIÇÕES 2026</small></a><button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="nav">☰ ${esc(itens.find(([h]) => h === ativo)?.[1] || 'Menu')}</button><nav class="nav" id="nav">${itens.map(([h, t]) => `<a href="${h}" class="${h === ativo ? 'on' : ''}">${t}</a>`).join('')}</nav><select class="sel" id="sel-mun" aria-label="Cidade" hidden></select>`);
+    `<a class="brand" href="/">Apuração <span id="brand-mun"></span><small>ELEIÇÕES 2026</small></a><button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="nav">☰ ${esc(itens.find(([h]) => h === ativo)?.[1] || 'Menu')}</button><nav class="nav" id="nav">${itens.map(([h, t]) => `<a href="${h}" class="${h === ativo ? 'on' : ''}">${t}</a>`).join('')}</nav><div class="cbx" id="sel-mun" hidden><input class="sel" id="mun-in" type="text" role="combobox" aria-expanded="false" aria-controls="mun-lista" aria-autocomplete="list" aria-label="Cidade: digite para buscar" placeholder="Buscar cidade…" autocomplete="off" spellcheck="false"><ul id="mun-lista" role="listbox" hidden></ul></div>`);
   // celular: o menu vira um dropdown
   const btn = document.getElementById('menu-btn'), nav = document.getElementById('nav');
   btn.onclick = () => { const aberto = nav.classList.toggle('open'); btn.setAttribute('aria-expanded', aberto); };
-  const sel = document.getElementById('sel-mun');
-  sel.onchange = () => escolherMunicipio(sel.value);
+  // cidade: caixa de busca (digita, filtra sem acento, setas + Enter ou toque)
+  const caixa = document.getElementById('sel-mun'), campo = document.getElementById('mun-in'), lista = document.getElementById('mun-lista');
+  let opcoes = [], indiceAtivo = 0;
+  const abrir = (aberto) => { lista.hidden = !aberto; campo.setAttribute('aria-expanded', aberto); };
+  const desenhar = (filtro = '') => {
+    const f = semAcento(filtro);
+    const todas = [{ id: 'todas', nome: `Todas as cidades${D.municipios.length > 20 ? ' (lento)' : ''}`, chave: 'TODAS AS CIDADES' }, ...D.municipios.map(m => ({ id: String(m.id), nome: m.nome, chave: semAcento(m.nome) }))];
+    opcoes = todas.filter(i => !f || i.chave.includes(f));
+    indiceAtivo = Math.max(0, opcoes.findIndex(i => i.chave.startsWith(f)));
+    lista.innerHTML = opcoes.map((i, k) => `<li role="option" data-id="${i.id}" class="${k === indiceAtivo ? 'ativo' : ''}" aria-selected="${i.id === String(D.municipioId)}">${esc(i.nome)}</li>`).join('') || '<li class="vazio">Nenhuma cidade encontrada</li>';
+    lista.querySelector('.ativo')?.scrollIntoView({ block: 'nearest' });
+  };
+  const mover = d => { if (!opcoes.length) return; indiceAtivo = (indiceAtivo + d + opcoes.length) % opcoes.length; lista.querySelectorAll('li').forEach((li, k) => li.classList.toggle('ativo', k === indiceAtivo)); lista.querySelector('.ativo')?.scrollIntoView({ block: 'nearest' }); };
+  const escolher = id => { abrir(false); campo.blur(); if (String(id) !== String(D.municipioId)) escolherMunicipio(id); else campo.value = D.rotulo; };
+  campo.onfocus = () => { campo.select(); desenhar(); abrir(true); };
+  campo.oninput = () => { desenhar(campo.value); abrir(true); };
+  campo.onkeydown = e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); lista.hidden ? (desenhar(campo.value), abrir(true)) : mover(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); mover(-1); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (opcoes[indiceAtivo]) escolher(opcoes[indiceAtivo].id); }
+    else if (e.key === 'Escape') { abrir(false); campo.value = D.rotulo; campo.blur(); }
+  };
+  campo.onblur = () => setTimeout(() => { abrir(false); campo.value = D.rotulo; }, 150); // espera o clique na lista
+  lista.onmousedown = e => { const li = e.target.closest('li[data-id]'); if (li) { e.preventDefault(); escolher(li.dataset.id); } };
   const atualizar = () => {
     document.getElementById('brand-mun').textContent = D.rotulo || 'Aracati';
-    sel.hidden = !D.multi;
-    sel.innerHTML = `<option value="todas">Todas as cidades${D.municipios.length > 20 ? ' (lento)' : ''}</option>` + D.municipios.map(m => `<option value="${m.id}">${esc(m.nome)}</option>`).join('');
-    sel.value = D.municipioId;
+    caixa.hidden = !D.multi;
+    if (document.activeElement !== campo) campo.value = D.rotulo;
   };
   listeners.add(atualizar); atualizar();
   document.body.insertAdjacentHTML('beforeend', '<footer class="rodape">Desenvolvido por <b>gdtech Soluções</b> · <a href="https://wa.me/5588999226302" target="_blank" rel="noopener">WhatsApp (88) 99922-6302</a></footer>');
