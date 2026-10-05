@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="/app.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
 <style>
 #map{height:560px}
 .secs{display:flex;flex-wrap:wrap;gap:6px}
@@ -29,7 +29,7 @@
 </script>
 </head>
 <body>
-<header class="topbar"><span class="live" id="live"></span></header>
+<header class="topbar"></header>
 <main>
   <div class="grid2">
     <div class="card">
@@ -64,6 +64,7 @@ async function carregarFoco(reenquadrar = false) {
   if (mapa && reenquadrar) mapa._ajustado = false; // só ao escolher: enquadra no que ele tem (as atualizações ao vivo não mexem no zoom)
   render();
 }
+const cargoIdUrl = foco => foco ? foco.cargo_id : A.cargoAtual();
 const votosPorLocal = () => {
   if (!focoId) return null;
   const m = new Map();
@@ -147,6 +148,7 @@ function render() {
   $('cand-x').hidden = !foco;
   for (const id of [...sel]) if (!A.secaoPorId(id)) sel.delete(id);          // trocou de cidade
   if (localSel && !A.localPorId(localSel)) localSel = null;
+  A.urlEstado({ cargo: cargoIdUrl(foco), cand: focoId, secoes: [...sel].join(','), local: localSel });
   const locaisMarcados = new Set([...sel].map(id => A.secaoPorId(id)?.local_id));
   A.desenharLocais(mapa, cargoId, l => {
     localSel = l.id;
@@ -176,7 +178,7 @@ function render() {
 }
 
 document.addEventListener('click', e => {
-  const c = e.target.closest('[data-cargo]'); if (c) { try { localStorage.setItem('cargo', c.dataset.cargo); } catch {} verTodos = false; focoId = null; votosFoco = null; $('cand').value = ''; if (mapa) mapa._ajustado = false; render(); return; }
+  const c = e.target.closest('[data-cargo]'); if (c) { try { localStorage.setItem('cargo', c.dataset.cargo); } catch {} A.urlEstado({ cargo: c.dataset.cargo }); verTodos = false; focoId = null; votosFoco = null; $('cand').value = ''; if (mapa) mapa._ajustado = false; render(); return; }
   const s = e.target.closest('[data-sec]'); if (s) { const id = Number(s.dataset.sec); sel.has(id) ? sel.delete(id) : sel.add(id); render(); return; }
   if (e.target.closest('[data-todas-local]')) { secoesDe(localSel).forEach(x => sel.add(x.id)); render(); return; }
   if (e.target.closest('[data-limpar]')) { sel.clear(); render(); return; }
@@ -208,8 +210,16 @@ document.addEventListener('input', e => {
 await A.iniciar();
 A.menu('/urnas');
 mapa = A.criarMapa($('map'));
-const q = Number(new URLSearchParams(location.search).get('secao'));
+// estado vindo do link: ?cand=ID&secoes=1,2,3&local=ID (e ?secao=ID, de links antigos)
+montarCandidatos();
+for (const id of (A.param('secoes') || '').split(',').map(Number)) if (id && A.secaoPorId(id)) sel.add(id);
+const q = Number(A.param('secao'));
 if (q && A.secaoPorId(q)) { localSel = A.secaoPorId(q).local_id; sel.add(q); }
-A.aoMudar(() => { montarCandidatos(); render(); if (focoId) carregarFoco(); }); montarCandidatos(); render();
+const lid = Number(A.param('local')); if (lid && A.localPorId(lid)) localSel = lid;
+else if (!localSel && sel.size) localSel = A.secaoPorId([...sel][0]).local_id;
+const cid = Number(A.param('cand')), cdt = A.D.candidatos.find(c => c.id === cid);
+if (cdt) { focoId = cid; $('cand').value = rotuloCand(cdt); }
+A.aoMudar(() => { montarCandidatos(); render(); if (focoId) carregarFoco(); }); render();
+if (focoId) carregarFoco(true);
 setTimeout(() => mapa?.invalidateSize(), 300);
 </script></body></html>

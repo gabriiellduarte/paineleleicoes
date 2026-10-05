@@ -14,16 +14,29 @@ export function aoMudar(f) { listeners.add(f); }
 // ---------- cidade selecionada ----------
 // O servidor manda todas as cidades; aqui D.secoes/locais/boletins ficam só com a cidade escolhida
 // (ou todas), de modo que as telas não precisam saber de cidades.
-export function municipioSalvo() { try { return localStorage.getItem('municipio'); } catch { return null; } }
+// ---------- filtros na URL (para compartilhar o link já filtrado) ----------
+export const param = k => new URLSearchParams(location.search).get(k);
+// atualiza só os parâmetros informados na barra de endereço (vazio/null remove); não recarrega a página
+export function urlEstado(obj) {
+  const u = new URL(location.href);
+  for (const [k, v] of Object.entries(obj)) (v == null || v === '' || v === false) ? u.searchParams.delete(k) : u.searchParams.set(k, v);
+  u.search = u.search.replace(/%2C/gi, ','); // vírgulas legíveis nas listas de ids
+  if (u.href !== location.href) history.replaceState(null, '', u);
+}
+// a cidade do link tem prioridade sobre a salva no navegador
+export function municipioSalvo() { return param('cidade') || (() => { try { return localStorage.getItem('municipio'); } catch { return null; } })(); }
 function aplicar(raw) {
   const ms = raw.municipios || [];
   const sel = raw.municipioSel;
   const nomes = new Map(ms.map(m => [m.id, m.nome]));
+  urlEstado({ cidade: ms.length > 1 ? sel : null });
+  if (param('cidade')) { try { localStorage.setItem('municipio', sel); } catch {} } // link aberto vira a cidade atual nas outras telas
   const secoes = raw.secoes.map(x => ({ ...x, cidade: nomes.get(x.municipio_id) || '' }));
   const locais = raw.locais.map(x => ({ ...x, cidade: nomes.get(x.municipio_id) || '' }));
   Object.assign(D, raw, { secoes, locais, municipioId: sel, multi: ms.length > 1, rotulo: sel === 'todas' ? (ms.length > 1 ? 'Todas as cidades' : ms[0]?.nome || '') : nomes.get(Number(sel)) });
 }
 export function escolherMunicipio(id) {
+  urlEstado({ cidade: id });
   try { localStorage.setItem('municipio', String(id)); } catch {}
   return carregar();
 }
@@ -136,10 +149,11 @@ export function cargoAtual() {
 }
 export function seletorCargo(el, aoTrocar) {
   const atual = cargoAtual();
+  urlEstado({ cargo: atual });
   el.innerHTML = D.cargos.map(c => `<option value="${c.id}" ${c.id === atual ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
   el.onchange = () => {
     try { localStorage.setItem('cargo', el.value); } catch {}
-    const u = new URL(location.href); if (u.searchParams.has('cargo')) { u.searchParams.set('cargo', el.value); history.replaceState(null, '', u); }
+    urlEstado({ cargo: el.value });
     aoTrocar(el.value);
   };
 }
@@ -147,7 +161,10 @@ export function seletorCargo(el, aoTrocar) {
 export function menu(ativo) {
   const itens = [['/', 'Dashboard'], ['/urnas', 'Por seção'], ['/lancar', 'Lançar boletim'], ['/candidatos', 'Candidatos'], ['/secoes', 'Seções'], ['/telao', 'Telão'], ['/admin', 'Cadastro']];
   document.querySelector('.topbar').insertAdjacentHTML('afterbegin',
-    `<a class="brand" href="/">Apuração <span id="brand-mun"></span><small>ELEIÇÕES 2026</small></a><nav class="nav">${itens.map(([h, t]) => `<a href="${h}" class="${h === ativo ? 'on' : ''}">${t}</a>`).join('')}</nav><select class="sel" id="sel-mun" aria-label="Cidade" style="margin-left:auto" hidden></select>`);
+    `<a class="brand" href="/">Apuração <span id="brand-mun"></span><small>ELEIÇÕES 2026</small></a><button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="nav">☰ ${esc(itens.find(([h]) => h === ativo)?.[1] || 'Menu')}</button><nav class="nav" id="nav">${itens.map(([h, t]) => `<a href="${h}" class="${h === ativo ? 'on' : ''}">${t}</a>`).join('')}</nav><select class="sel" id="sel-mun" aria-label="Cidade" hidden></select>`);
+  // celular: o menu vira um dropdown
+  const btn = document.getElementById('menu-btn'), nav = document.getElementById('nav');
+  btn.onclick = () => { const aberto = nav.classList.toggle('open'); btn.setAttribute('aria-expanded', aberto); };
   const sel = document.getElementById('sel-mun');
   sel.onchange = () => escolherMunicipio(sel.value);
   const atualizar = () => {
@@ -157,6 +174,7 @@ export function menu(ativo) {
     sel.value = D.municipioId;
   };
   listeners.add(atualizar); atualizar();
+  document.body.insertAdjacentHTML('beforeend', '<footer class="rodape">Desenvolvido por <b>gdtech Soluções</b> · <a href="https://wa.me/5588999226302" target="_blank" rel="noopener">WhatsApp (88) 99922-6302</a></footer>');
 }
 
 // ---------- escrita (PIN + nome) ----------
@@ -210,15 +228,31 @@ export function criarMapa(el, escuro = false) {
   const m = L.map(el, { zoomControl: !escuro, attributionControl: !escuro }).setView([-4.5617, -37.7697], 12);
   const url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'; // o telão escurece via CSS (ver .escuro)
   L.tileLayer(url, { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(m);
-  m._camada = L.layerGroup().addTo(m);
+  m._camada = grupoDePinos().addTo(m);
   return m;
+}
+
+// Pinos próximos se juntam num círculo com a soma (seções, ou votos do candidato) e se abrem ao dar zoom.
+// Sem a biblioteca de agrupamento (offline), cai para os pinos soltos.
+function grupoDePinos() {
+  if (!L.markerClusterGroup) return L.layerGroup();
+  return L.markerClusterGroup({
+    maxClusterRadius: 48, showCoverageOnHover: false, chunkedLoading: true,
+    iconCreateFunction: (c) => {
+      const filhos = c.getAllChildMarkers();
+      const soma = filhos.reduce((t, k) => t + (k.options.valor || 0), 0);
+      const tam = Math.max(38, Math.round(18 + fmt(soma).length * 8)); // cresce com os dígitos para o número caber
+      const marcado = filhos.some(k => k.options.marcado);
+      return L.divIcon({ html: `<div class="clu${marcado ? ' sel' : ''}" title="${filhos.length} locais" style="width:${tam}px;height:${tam}px;line-height:${tam - 6}px">${fmt(soma)}</div>`, className: 'clu-wrap', iconSize: [tam, tam] });
+    },
+  });
 }
 // votosPorLocal (Map local→votos, opcional): mostra só os locais com voto desse candidato, com os votos no pino
 export function desenharLocais(m, cargoId, aoClicar, selecionados = null, votosPorLocal = null) {
   if (!m) return;
   m._camada.clearLayers();
   if (m._mun !== D.municipioId) { m._mun = D.municipioId; m._ajustado = false; } // trocou de cidade: reenquadra
-  const pts = [];
+  const pts = [], marcadores = [];
   for (const l of D.locais) {
     if (l.lat == null || l.lng == null) continue;
     const st = statusLocal(l.id, cargoId);
@@ -227,13 +261,13 @@ export function desenharLocais(m, cargoId, aoClicar, selecionados = null, votosP
     if (votosPorLocal && !vl) continue;
     const r = votosPorLocal ? 12 + Math.min(Math.sqrt(vl), 14) * 1.2 : 12 + Math.min(st.total, 8) * 1.6;
     const marcado = selecionados?.has(l.id); // locais somados no dashboard: contorno azul grosso
-    const mk = L.circleMarker([l.lat, l.lng], { radius: r + (marcado ? 3 : 0), color: marcado ? '#1560d4' : '#fff', weight: marcado ? 5 : 2, fillColor: COR_STATUS[st.status], fillOpacity: .95 }).addTo(m._camada);
-    if (marcado) mk.bringToFront();
+    const mk = L.circleMarker([l.lat, l.lng], { radius: r + (marcado ? 3 : 0), color: marcado ? '#1560d4' : '#fff', weight: marcado ? 5 : 2, fillColor: COR_STATUS[st.status], fillOpacity: .95, valor: votosPorLocal ? vl : st.total, marcado }); // valor/marcado alimentam o círculo do grupo
     mk.bindTooltip(votosPorLocal ? fmt(vl) : String(st.total), { permanent: true, direction: 'center', className: 'pino' });
     mk.bindPopup(`<b>${esc(l.nome)}</b><br>${votosPorLocal ? `${fmt(vl)} votos · ` : ''}${st.apuradas}/${st.total} seções apuradas`);
     if (aoClicar) mk.on('click', () => aoClicar(l));
-    pts.push([l.lat, l.lng]);
+    pts.push([l.lat, l.lng]); marcadores.push(mk);
   }
+  m._camada.addLayers ? m._camada.addLayers(marcadores) : marcadores.forEach(k => k.addTo(m._camada));
   if (m._aviso) { m._aviso.remove(); m._aviso = null; }
   if (!pts.length) {
     m._aviso = L.control({ position: 'topright' });

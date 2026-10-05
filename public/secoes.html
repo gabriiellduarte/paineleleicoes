@@ -26,7 +26,7 @@ legend{font:600 12px var(--f-mono);text-transform:uppercase;letter-spacing:.06em
 </script>
 </head>
 <body>
-<header class="topbar"><span class="live" id="live"></span></header>
+<header class="topbar"></header>
 <main>
   <div class="card">
     <div class="card-h"><div><h2 id="h">Seções</h2><p class="muted" id="resumo"></p></div>
@@ -82,12 +82,14 @@ const pad = n => String(n).padStart(4, '0');
 // cidade onde um local/seção novo nasce: a selecionada no topo (não vale "todas" com várias cidades)
 const cidadeNova = () => { if (A.D.municipioId === 'todas') { if (A.D.municipios.length === 1) return A.D.municipios[0].id; throw new Error('Escolha uma cidade no topo da página antes de criar.'); } return Number(A.D.municipioId); };
 const virg = v => (v != null ? String(v).replace('.', ',') : '');
-let vista = 'secoes', busca = '', fLocal = '', edit = null, editL = null, confirmDel = false, linkLocal = null;
+const P = new URLSearchParams(location.search); // filtros vindos do link
+let vista = P.get('vista') === 'locais' ? 'locais' : 'secoes', busca = P.get('q') || '', fLocal = P.get('local') || '', edit = null, editL = null, confirmDel = false, linkLocal = null;
 
 const dots = id => `<span class="dots" title="Presidente, governador, senador, dep. federal, dep. estadual">${A.D.cargos.map(c => `<i style="background:${A.COR_STATUS[A.statusSecao(id, c.id)]}"></i>`).join('')}</span>`;
 
 function render() {
   const b = norm(busca), secoesView = vista === 'secoes';
+  A.urlEstado({ vista: vista === 'locais' ? 'locais' : '', q: busca, local: secoesView ? fLocal : '' });
   document.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('on', x.dataset.v === vista));
   $('h').textContent = secoesView ? 'Seções' : 'Locais de votação';
   $('novo').textContent = secoesView ? 'Nova seção' : 'Novo local';
@@ -221,6 +223,7 @@ $('fl').onchange = e => { fLocal = e.target.value; render(); };
 
 await A.iniciar();
 A.menu('/secoes');
+$('busca').value = busca;
 A.aoMudar(() => { $('fl').innerHTML = ''; render(); });
 render();
 </script></body></html>

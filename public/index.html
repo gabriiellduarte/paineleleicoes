@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="/app.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script><style>.rankbox{display:flex;flex-direction:column;gap:20px;max-height:640px;overflow:auto}.grp{display:flex;flex-direction:column;gap:12px}.grp+.grp{border-top:1px solid var(--line);padding-top:16px}.grp-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}</style><!-- Google tag (gtag.js) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script><style>.rankbox{display:flex;flex-direction:column;gap:20px;max-height:640px;overflow:auto}.grp{display:flex;flex-direction:column;gap:12px}.grp+.grp{border-top:1px solid var(--line);padding-top:16px}.grp-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}</style><!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5KPR9F449"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -14,7 +14,7 @@
 </script>
 </head>
 <body>
-<header class="topbar"><select class="sel" id="cargo" aria-label="Cargo"></select><span class="live" id="live"></span></header>
+<header class="topbar"><select class="sel" id="cargo" aria-label="Cargo"></select></header>
 <main>
   <div class="card" id="soma" style="min-height:150px"></div>
   <div class="kpis" id="kpis"></div>
@@ -35,7 +35,9 @@
 </main>
 <script type="module">
 import * as A from '/app.js';
-let filtro='todas', busca='', locaisSel=new Set(), mapa;
+const P=new URLSearchParams(location.search); // filtros vindos do link
+let filtro=['apurada','rascunho','aguardando'].includes(P.get('status'))?P.get('status'):'todas', busca=P.get('q')||'', mapa;
+let locaisSel=new Set((P.get('locais')||'').split(',').filter(Boolean).map(Number));
 const $=id=>document.getElementById(id);
 // Painel no topo: soma dos votos nos locais marcados no mapa (mesmos candidatos exibidos no resultado).
 function renderSoma(grupos,cargo){
@@ -74,6 +76,7 @@ function render(){
   for(const id of [...locaisSel]) if(!A.localPorId(id)) locaisSel.delete(id); // trocou de cidade
   A.desenharLocais(mapa,cargo,l=>{locaisSel.has(l.id)?locaisSel.delete(l.id):locaisSel.add(l.id);render();},locaisSel);
   renderSoma(grupos,cargo);
+  A.urlEstado({cargo,status:filtro==='todas'?'':filtro,q:busca,locais:[...locaisSel].join(',')});
   // Tabela: colunas = favoritos de todos os cargos (sem favoritos, os 10 primeiros do cargo selecionado).
   const alvo=grupos.length?grupos:[{c:A.D.cargos.find(x=>x.id===cargo),r:res}];
   const colunas=alvo.flatMap(g=>g.r.exibidos.map(cd=>({cargo:g.c,cd})));

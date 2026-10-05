@@ -17,7 +17,7 @@
 </script>
 </head>
 <body>
-<header class="topbar"><label class="muted" for="modo" style="font-size:12px">Listar</label><select class="sel" id="modo" aria-label="O que listar"></select><span class="live" id="live"></span></header>
+<header class="topbar"><label class="muted" for="modo" style="font-size:12px">Listar</label><select class="sel" id="modo" aria-label="O que listar"></select></header>
 <main>
 <div class="bu">
   <div class="card">
@@ -33,7 +33,7 @@ import * as A from '/app.js';
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 let sel = Number(params.get('secao')) || null;
-let busca = '', filtro = 'pend', rascunhoLocal = {};
+let busca = params.get('q') || '', filtro = ['todas', 'apurada'].includes(params.get('filtro')) ? params.get('filtro') : 'pend', rascunhoLocal = {};
 let modo = 'fav'; // 'fav' = favoritos de todos os cargos; senão, o id de um cargo (todos os candidatos dele)
 
 const temFavoritos = () => A.D.candidatos.some(c => c.favorito);
@@ -192,14 +192,14 @@ async function salvar(status) {
       const prox = ordenadas().find(x => x.st !== 'apurada' && x.s.id !== sel);
       if (prox) sel = prox.s.id;
     }
-    history.replaceState(null, '', `?secao=${sel}`);
+    A.urlEstado({ secao: sel });
     renderLista(); renderForm();
     document.querySelector('[data-c]')?.focus();
   } catch (e) { A.toast(e.message, true); }
 }
 
 document.addEventListener('click', async e => {
-  const li = e.target.closest('.li'); if (li) { sel = Number(li.dataset.s); history.replaceState(null, '', `?secao=${sel}`); renderLista(); renderForm(); document.querySelector('[data-c]')?.focus(); }
+  const li = e.target.closest('.li'); if (li) { sel = Number(li.dataset.s); A.urlEstado({ secao: sel }); renderLista(); renderForm(); document.querySelector('[data-c]')?.focus(); }
   if (e.target.id === 'salvar') salvar('apurada');
   if (e.target.id === 'rasc') salvar('rascunho');
   if (e.target.id === 'del') {
@@ -215,14 +215,15 @@ document.addEventListener('keydown', e => {
   const campos = [...document.querySelectorAll('.num')], i = campos.indexOf(e.target);
   if (i < campos.length - 1) campos[i + 1].focus(); else if (!$('salvar').disabled) salvar('apurada');
 });
-$('busca').oninput = e => { busca = e.target.value; renderLista(); };
-$('filtro').onchange = e => { filtro = e.target.value; renderLista(); };
-$('modo').onchange = e => { modo = e.target.value; try { localStorage.setItem('lancarModo', modo); } catch {} renderLista(); renderForm(); };
+$('busca').oninput = e => { busca = e.target.value; A.urlEstado({ q: busca }); renderLista(); };
+$('filtro').onchange = e => { filtro = e.target.value; A.urlEstado({ filtro: filtro === 'pend' ? '' : filtro }); renderLista(); };
+$('modo').onchange = e => { modo = e.target.value; try { localStorage.setItem('lancarModo', modo); } catch {} A.urlEstado({ modo }); renderLista(); renderForm(); };
 
 await A.iniciar();
 A.menu('/lancar');
-try { modo = localStorage.getItem('lancarModo') || 'fav'; } catch {}
+try { modo = params.get('modo') || localStorage.getItem('lancarModo') || 'fav'; } catch {}
 montarSeletor();
+$('busca').value = busca; $('filtro').value = filtro;
 // ao receber dados novos, atualiza a lista; o formulário só é redesenhado se o usuário não estiver digitando
 A.aoMudar(() => { montarSeletor(); renderLista(); if (!document.activeElement?.matches?.('.num')) renderForm(); });
 renderLista(); renderForm();

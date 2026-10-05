@@ -22,7 +22,7 @@
 </script>
 </head>
 <body>
-<header class="topbar"><select class="sel" id="cargo" aria-label="Cargo"></select><span class="live" id="live"></span></header>
+<header class="topbar"><select class="sel" id="cargo" aria-label="Cargo"></select></header>
 <main>
   <div class="card">
     <div class="card-h"><div><h2>Candidatos</h2><p class="muted" id="resumo"></p></div>
@@ -35,11 +35,13 @@
 <script type="module">
 import * as A from '/app.js';
 const $ = id => document.getElementById(id);
-let modo = 'todos', busca = '';
+const P = new URLSearchParams(location.search); // filtros vindos do link
+let modo = P.get('ver') === 'fav' ? 'fav' : 'todos', busca = P.get('q') || '';
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 function render() {
   const cargo = A.cargoAtual(), res = A.resultado(cargo);
+  A.urlEstado({ cargo, ver: modo === 'fav' ? 'fav' : '', q: busca });
   const todos = A.candidatosDe(cargo);
   const votos = new Map(res.rank.map(c => [c.id, c.votos]));
   const nFav = todos.filter(c => c.favorito).length;
@@ -91,6 +93,7 @@ document.addEventListener('keydown', e => {
 $('busca').oninput = e => { busca = e.target.value; render(); };
 await A.iniciar();
 A.menu('/candidatos');
+$('busca').value = busca;
 A.seletorCargo($('cargo'), render);
 A.aoMudar(() => { if (!document.activeElement?.matches?.('.vg')) render(); }); render();
 </script></body></html>
